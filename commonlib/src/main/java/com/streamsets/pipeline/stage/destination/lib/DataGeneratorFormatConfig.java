@@ -624,6 +624,8 @@ public class DataGeneratorFormatConfig implements DataFormatConfig {
       case WHOLE_FILE:
         valid = validateWholeFileFormat(context, configPrefix, issues);
         break;
+      case SAS:
+    	  break;
       default:
         issues.add(context.createConfigIssue(groupName, configPrefix, DataFormatErrors.DATA_FORMAT_04, dataFormat));
         valid = false;

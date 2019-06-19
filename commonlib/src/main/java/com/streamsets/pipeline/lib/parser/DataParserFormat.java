@@ -34,6 +34,7 @@ import com.streamsets.pipeline.lib.parser.udp.DatagramParserFactory;
 import com.streamsets.pipeline.lib.parser.net.syslog.SyslogDataParserFactory;
 import com.streamsets.pipeline.lib.parser.wholefile.WholeFileDataParserFactory;
 import com.streamsets.pipeline.lib.parser.xml.XmlDataParserFactory;
+import com.streamsets.pipeline.lib.parser.sas.SASParseFactory;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
@@ -56,6 +57,7 @@ public enum DataParserFormat implements DataFormat<DataParserFactory> {
   NETFLOW(NetflowDataParserFactory.class, NetflowDataParserFactory.MODES, NetflowDataParserFactory.CONFIGS),
   EXCEL(WorkbookParserFactory.class, WorkbookParserFactory.MODES, WorkbookParserFactory.CONFIGS),
   FLOWFILE(FlowFileParserFactory.class, FlowFileParserFactory.MODES, FlowFileParserFactory.CONFIGS),
+  SAS(SASParseFactory.class, SASParseFactory.MODES, SASParseFactory.CONFIGS),
   ;
 
   private final Class<? extends DataParserFactory> klass;
