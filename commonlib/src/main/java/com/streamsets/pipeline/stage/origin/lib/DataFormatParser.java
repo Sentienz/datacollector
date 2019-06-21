@@ -405,6 +405,10 @@ public class DataFormatParser {
             .setMaxDataLen(-1)
             .setConfig(WorkbookParserConstants.HEADER, dataFormatConfig.excelHeader);
         break;
+      case SAS:
+        builder
+             .setMaxDataLen(-1);
+          break;
       default:
         throw new IllegalStateException(Utils.format("Unknown data format: {}", dataFormat));
     }

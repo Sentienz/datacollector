@@ -26,7 +26,7 @@ public class SASParseFactory extends DataParserFactory {
 	@Override
 	public DataParser getParser(String id, InputStream is, String offset) throws DataParserException {
 		sasFileReader = new SasFileReaderImpl(is);
-		return new SASDataParser(sasFileReader, getSettings().getContext(), id);
+		return new SASDataParser(sasFileReader, getSettings().getContext(), id, offset);
 	}
 
 	@Override
