@@ -1,11 +1,16 @@
 package com.streamsets.pipeline.lib.parser.sas;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.epam.parso.Column;
 import com.epam.parso.SasFileReader;
+import com.streamsets.pipeline.api.Field;
 import com.streamsets.pipeline.api.ProtoConfigurableEntity;
 import com.streamsets.pipeline.api.Record;
 import com.streamsets.pipeline.lib.parser.AbstractDataParser;
@@ -22,6 +27,7 @@ public class SASDataParser extends AbstractDataParser {
 	private boolean isClosed;
 	private boolean alreadyParsed;
 	private String id;
+	private List<Field> headers;
 
 	public SASDataParser(SasFileReader sasFileReader, ProtoConfigurableEntity.Context context, String id) {
 		this.sasFileReader = sasFileReader;
@@ -30,15 +36,13 @@ public class SASDataParser extends AbstractDataParser {
 	}
 
 	@Override
-	public Record parse() throws IOException, DataParserException {
-		LOG.debug("Test SAS - Inside parse()");
+	public Record parse() throws DataParserException, IOException {
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
 		if (!alreadyParsed) {
-			LOG.debug("Test SAS: alreadyparsed");
-			// Object[] records = sasFileReader.readNext();
 			Record record = context.createRecord(id);
+			record = updateRecordsWithHeader(record);
 			alreadyParsed = true;
 			return record;
 		}
@@ -56,4 +60,27 @@ public class SASDataParser extends AbstractDataParser {
 		isClosed = true;
 	}
 
+	private Record updateRecordsWithHeader(Record record) throws IOException {
+		List<Column> columnList = sasFileReader.getColumns();
+		Object[] rows = sasFileReader.readNext();
+
+		headers = new ArrayList<>();
+		for (Column col : sasFileReader.getColumns()) {
+			headers.add(Field.create(col.getName()));
+		}
+
+		LinkedHashMap<String, Field> listMap = new LinkedHashMap<>();
+		for (int i = 0; i < columnList.size(); i++) {
+			String key;
+			Field header = (headers != null) ? headers.get(i) : null;
+			if (header != null) {
+				key = header.getValueAsString();
+			} else {
+				key = Integer.toString(i);
+			}
+			listMap.put(key, Field.create(Field.Type.STRING, rows[i]));
+		}
+		record.set(Field.createListMap(listMap));
+		return record;
+	}
 }
