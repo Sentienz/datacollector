@@ -52,9 +52,8 @@ public class SASDataParser extends AbstractDataParser {
 	}
 
 	@Override
-	public String getOffset() throws DataParserException, IOException {
-		// Will return the offset -1 if already parsed else return 0.
-		return (!alreadyParsed) ? OFFSET_ZERO : OFFSET_MINUS_ONE;
+	public String getOffset(){
+	  return sasFileReader.getOffset().toString();
 	}
 
 	@Override
