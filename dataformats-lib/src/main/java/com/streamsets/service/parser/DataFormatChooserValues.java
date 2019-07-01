@@ -35,7 +35,8 @@ public class DataFormatChooserValues extends BaseEnumChooserValues<DataFormat> {
       DataFormat.SYSLOG,
       DataFormat.TEXT,
       DataFormat.WHOLE_FILE,
-      DataFormat.XML
+      DataFormat.XML,
+      DataFormat.SAS
     );
   }
 }

@@ -1210,6 +1210,9 @@ public class DataParserFormatConfig implements DataFormatConfig {
       case SYSLOG:
         // nothing to validate for these formats
         break;
+      case SAS:
+        valid = true;
+        break;
       default:
         issues.add(context.createConfigIssue(
             stageGroup,
@@ -1524,6 +1527,9 @@ public class DataParserFormatConfig implements DataFormatConfig {
       case EXCEL:
         buildWorkbookParser(builder);
         break;
+      case SAS:
+        buildSasParser(builder);
+        break;
       default:
         throw new IllegalStateException("Unexpected data format" + dataFormat);
     }
@@ -1632,6 +1638,11 @@ public class DataParserFormatConfig implements DataFormatConfig {
   private void buildWorkbookParser(DataParserFactoryBuilder builder) {
     builder
         .setMode(excelHeader)
+        .setMaxDataLen(-1);
+  }
+
+  private void buildSasParser(DataParserFactoryBuilder builder) {
+	builder
         .setMaxDataLen(-1);
   }
 
