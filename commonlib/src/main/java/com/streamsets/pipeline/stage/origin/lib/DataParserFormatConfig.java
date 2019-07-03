@@ -1213,6 +1213,10 @@ public class DataParserFormatConfig implements DataFormatConfig {
       case SAS:
         valid = true;
         break;
+      case SASXPT:
+        valid = true;
+        break;
+
       default:
         issues.add(context.createConfigIssue(
             stageGroup,
@@ -1530,6 +1534,9 @@ public class DataParserFormatConfig implements DataFormatConfig {
       case SAS:
         buildSasParser(builder);
         break;
+      case SASXPT:
+        buildSasXptParser(builder);
+        break;
       default:
         throw new IllegalStateException("Unexpected data format" + dataFormat);
     }
@@ -1644,6 +1651,11 @@ public class DataParserFormatConfig implements DataFormatConfig {
   private void buildSasParser(DataParserFactoryBuilder builder) {
 	builder
         .setMaxDataLen(-1);
+  }
+  
+  private void buildSasXptParser(DataParserFactoryBuilder builder) {
+	  builder
+          .setMaxDataLen(-1);
   }
 
   /**

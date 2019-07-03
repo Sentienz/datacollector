@@ -30,7 +30,8 @@ public class DataFormatChooserValues extends BaseEnumChooserValues<DataFormat> {
       DataFormat.SDC_JSON,
       DataFormat.WHOLE_FILE,
       DataFormat.XML,
-      DataFormat.SAS
+      DataFormat.SAS,
+      DataFormat.SASXPT
     );
   }
 }

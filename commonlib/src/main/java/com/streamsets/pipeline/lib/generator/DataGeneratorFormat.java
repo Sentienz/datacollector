@@ -28,6 +28,7 @@ import com.streamsets.pipeline.lib.generator.text.TextDataGeneratorFactory;
 import com.streamsets.pipeline.lib.generator.wholefile.WholeFileDataGeneratorFactory;
 import com.streamsets.pipeline.lib.generator.xml.XmlDataGeneratorFactory;
 import com.streamsets.pipeline.lib.generator.sas.SASDataGeneratorFactory;
+import com.streamsets.pipeline.lib.generator.sasxpt.SASXPTDataGeneratorFactory;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
@@ -48,6 +49,7 @@ public enum DataGeneratorFormat implements DataFormat<DataGeneratorFactory> {
   PROTOBUF(ProtobufDataGeneratorFactory.class, ProtobufDataGeneratorFactory.MODES, ProtobufDataGeneratorFactory.CONFIGS),
   WHOLE_FILE(WholeFileDataGeneratorFactory.class, WholeFileDataGeneratorFactory.MODES, WholeFileDataGeneratorFactory.CONFIGS),
   SAS(SASDataGeneratorFactory.class,SASDataGeneratorFactory.MODES,SASDataGeneratorFactory.CONFIGS),
+  SASXPT(SASXPTDataGeneratorFactory.class,SASXPTDataGeneratorFactory.MODES,SASXPTDataGeneratorFactory.CONFIGS),
   ;
 
   private final Class<? extends DataGeneratorFactory> klass;

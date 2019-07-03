@@ -428,7 +428,7 @@
       </activation>
       <build>
         <plugins>
-          <plugin>
+        <!--   <plugin>
             <inherited>false</inherited>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>exec-maven-plugin</artifactId>
@@ -450,7 +450,7 @@
                 <argument>-N</argument>
               </arguments>
             </configuration>
-          </plugin>
+          </plugin> -->
         </plugins>
       </build>
     </profile>

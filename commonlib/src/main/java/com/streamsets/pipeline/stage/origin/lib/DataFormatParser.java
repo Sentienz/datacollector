@@ -408,6 +408,10 @@ public class DataFormatParser {
         builder
             .setMaxDataLen(-1);
        break;
+      case SASXPT:
+          builder
+              .setMaxDataLen(-1);
+         break;
       default:
         throw new IllegalStateException(Utils.format("Unknown data format: {}", dataFormat));
     }

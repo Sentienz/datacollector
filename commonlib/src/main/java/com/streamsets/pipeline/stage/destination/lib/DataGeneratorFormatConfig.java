@@ -627,6 +627,9 @@ public class DataGeneratorFormatConfig implements DataFormatConfig {
       case SAS:
         valid = true;  
         break;
+      case SASXPT:
+          valid = true;  
+          break;
       default:
         issues.add(context.createConfigIssue(groupName, configPrefix, DataFormatErrors.DATA_FORMAT_04, dataFormat));
         valid = false;
