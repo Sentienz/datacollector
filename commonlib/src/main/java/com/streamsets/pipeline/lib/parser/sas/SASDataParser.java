@@ -27,6 +27,7 @@ public class SASDataParser extends AbstractDataParser {
 	private String id;
 	private String offset;
 	private long recordCount;
+	private boolean eof;
 
 	public SASDataParser(SasFileReader sasFileReader, ProtoConfigurableEntity.Context context, String id,
 			String offset) {
@@ -44,16 +45,17 @@ public class SASDataParser extends AbstractDataParser {
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
-		record = context.createRecord(id + "::" + recordCount);
 		record = updateRecordsWithHeader(record);
 		alreadyParsed = true;
-		recordCount++;
+		if(record!=null) {
+		  recordCount++;
+		}
 		return record;
 	}
 
 	@Override
 	public String getOffset(){
-	  return sasFileReader.getOffset().toString();
+	  return eof ? String.valueOf(-1) : sasFileReader.getOffset().toString();
 	}
 
 	@Override
@@ -62,8 +64,16 @@ public class SASDataParser extends AbstractDataParser {
 	}
 
 	private Record updateRecordsWithHeader(Record record) throws IOException {
+	    
+	    Object[] rows = sasFileReader.readNext();
+	    if(rows==null || rows.length==0) {
+	      eof=true;
+	      return null;
+	    }
+	  
+	    record = context.createRecord(id + "::" + recordCount);
+	  
 		List<Column> columnList = sasFileReader.getColumns();
-		Object[] rows = sasFileReader.readNext();
 		headers = new ArrayList<>();
 		for (Column col : sasFileReader.getColumns()) {
 			headers.add(Field.create(col.getName()));
