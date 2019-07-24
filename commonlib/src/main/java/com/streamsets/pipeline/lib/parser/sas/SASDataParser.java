@@ -45,10 +45,15 @@ public class SASDataParser extends AbstractDataParser {
 	
 	@Override
 	public Record parse() throws IOException, DataParserException {
-		Record record = null;
+		
+		if(Integer.parseInt(offset)>recordCount) {
+			close();
+		}
+		
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
+		Record record = null;
 		if(!alreadyParsed) {
 		record = updateRecordsWithHeader(record);
 		alreadyParsed = true;
