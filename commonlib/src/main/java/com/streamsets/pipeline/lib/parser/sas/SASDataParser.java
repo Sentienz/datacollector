@@ -48,6 +48,9 @@ public class SASDataParser extends AbstractDataParser {
 	public Record parse() throws IOException, DataParserException {	
 		
 		Record record = null;
+		if(eof==true) {
+			return null;
+		}
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
@@ -64,7 +67,6 @@ public class SASDataParser extends AbstractDataParser {
 	public String getOffset() throws  IOException {
 		  return eof ? String.valueOf(-1) : sasFileReader.getOffset().toString();
 	}
-
 	
 	private Record updateRecordsWithHeader(Record record) throws IOException {
 		currentOffset = Integer.valueOf(sasFileReader.getOffset());	
@@ -79,6 +81,10 @@ public class SASDataParser extends AbstractDataParser {
 		catch(Exception e) {
 			eof=true;
 			return null;
+		}
+		
+		if(Integer.parseInt(getOffset())>recordCount) {
+			eof=true;
 		}
 		
 		List<Column> columnlist = sasFileReader.getColumns();
@@ -115,6 +121,5 @@ public class SASDataParser extends AbstractDataParser {
 	        break;
 	      }
 	    }
-	}
-		
+	}	
 }
