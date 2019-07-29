@@ -28,39 +28,30 @@ public class SASDataParser extends AbstractDataParser {
 	private boolean isClosed;
 	private boolean alreadyParsed = false;
 	private String id;
-	private String offset;
+	private int offset;
 	private long recordCount;
 	private boolean eof;
 	int currentOffset;
 
 	public SASDataParser(SasFileReader sasFileReader, ProtoConfigurableEntity.Context context, String id,
-			String offset) {
+			String offset) throws DataParserException, IOException {
 		this.sasFileReader = sasFileReader;
 		this.context = context;
 		this.id = id;
-		this.offset = offset;
+		this.offset = Integer.parseInt(offset);
 		this.sasFileProperties = sasFileReader.getSasFileProperties();
 		this.recordCount = sasFileProperties.getRowCount();
+		seekOffset();
 		}																																																																																	
-	
+
 	@Override
-	public Record parse() throws IOException, DataParserException {
+	public Record parse() throws IOException, DataParserException {	
 		
-		if(Integer.parseInt(offset)>recordCount) {
-			close();
-		}
-		
+		Record record = null;
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
-		Record record = null;
-		if(!alreadyParsed) {
 		record = updateRecordsWithHeader(record);
-		alreadyParsed = true;
-		}
-		else {
-		eof=true;
-		}
 		return record;
 	}
 
@@ -77,11 +68,19 @@ public class SASDataParser extends AbstractDataParser {
 	
 	private Record updateRecordsWithHeader(Record record) throws IOException {
 		currentOffset = Integer.valueOf(sasFileReader.getOffset());	
-		if(Integer.parseInt(offset)!=currentOffset) {
-			currentOffset = getCurrentOffset(Integer.parseInt(offset),currentOffset);
-		}
 		record = context.createRecord(id + "::" + currentOffset);
 		Object rows[] = sasFileReader.readNext();
+		try {
+			if(rows.length==0 || rows==null) {
+				eof = true;
+			return null;
+			}
+		}
+		catch(Exception e) {
+			eof=true;
+			return null;
+		}
+		
 		List<Column> columnlist = sasFileReader.getColumns();
 		headers = new ArrayList<Field>();
 		for(Column col :sasFileReader.getColumns()) {
@@ -105,12 +104,17 @@ public class SASDataParser extends AbstractDataParser {
 		
 	return record;
 	}
-
-	private int getCurrentOffset(int offset, int currentOffset) throws IOException {
-		while(offset!=currentOffset){
-			Object rows[] = sasFileReader.readNext();
-			currentOffset = sasFileReader.getOffset();
-		}
-		return sasFileReader.getOffset();
+	
+	private void seekOffset() throws IOException ,DataParserException{
+		int count = 0;
+	    while(count < offset) {
+	      if(count<recordCount) {
+	    	 Object rows[] = sasFileReader.readNext();
+	        count++;
+	      } else {
+	        break;
+	      }
+	    }
 	}
+		
 }
