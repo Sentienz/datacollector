@@ -38,6 +38,9 @@ public class SASXPTDataParser extends AbstractDataParser {
 	@Override
 	public Record parse() throws IOException {
 		
+		if(eof==true) {
+			return null;
+		}
 		Record record = null;
 		if (isClosed) {
 			throw new IOException("The parser is closed");
@@ -69,7 +72,7 @@ public class SASXPTDataParser extends AbstractDataParser {
 		try {
 			if(rows.size()==0 || rows==null) {
 				eof = true;
-			return null;
+				return null;
 			}
 		}
 		catch(Exception e) {
