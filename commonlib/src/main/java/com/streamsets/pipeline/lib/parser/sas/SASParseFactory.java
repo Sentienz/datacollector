@@ -1,5 +1,6 @@
 package com.streamsets.pipeline.lib.parser.sas;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.util.Collections;
@@ -15,6 +16,7 @@ import com.epam.parso.impl.SasFileReaderImpl;
 import com.streamsets.pipeline.lib.parser.DataParser;
 import com.streamsets.pipeline.lib.parser.DataParserException;
 import com.streamsets.pipeline.lib.parser.DataParserFactory;
+import com.streamsets.pipeline.lib.parser.Errors;
 
 public class SASParseFactory extends DataParserFactory {
 
@@ -29,12 +31,15 @@ public class SASParseFactory extends DataParserFactory {
 	@Override
 	public DataParser getParser(String id, InputStream is, String offset) throws DataParserException {
 		sasFileReader = new SasFileReaderImpl(is);
-		return new SASDataParser(sasFileReader, getSettings().getContext(), id, offset);
-	}
-
+		try {
+			return new SASDataParser(sasFileReader, getSettings().getContext(), id, offset);
+		} catch (IOException e) {
+		      throw new DataParserException(Errors.DATA_PARSER_01, e.toString(), e);
+	    }
+		}
+	
 	@Override
 	public DataParser getParser(String id, Reader reader, long offset) throws DataParserException {
 		throw new UnsupportedOperationException();
 	}
-
 }
