@@ -1,13 +1,9 @@
 package com.streamsets.pipeline.lib.parser.sas;
 
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.sql.Date;
-import java.sql.Time;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-
 import com.epam.parso.Column;
 import com.epam.parso.SasFileProperties;
 import com.epam.parso.SasFileReader;
@@ -23,10 +19,7 @@ public class SASDataParser extends AbstractDataParser {
 	private SasFileReader sasFileReader;
 	private SasFileProperties sasFileProperties;
 	private List<Field> headers;
-	private static final String OFFSET_MINUS_ONE = "-1";
-	private static final String OFFSET_ZERO = "0";
 	private boolean isClosed;
-	private boolean alreadyParsed = false;
 	private String id;
 	private int offset;
 	private long recordCount;
@@ -48,7 +41,7 @@ public class SASDataParser extends AbstractDataParser {
 	public Record parse() throws IOException, DataParserException {	
 		
 		Record record = null;
-		if(eof==true) {
+		if( eof == true ) {
 			return null;
 		}
 		if (isClosed) {
@@ -72,14 +65,8 @@ public class SASDataParser extends AbstractDataParser {
 		currentOffset = Integer.valueOf(sasFileReader.getOffset());	
 		record = context.createRecord(id + "::" + currentOffset);
 		Object rows[] = sasFileReader.readNext();
-		try {
-			if(rows.length==0 || rows==null) {
-				eof = true;
-			return null;
-			}
-		}
-		catch(Exception e) {
-			eof=true;
+		if( rows==null || rows.length==0 ) {
+			eof = true;
 			return null;
 		}
 		
@@ -115,7 +102,7 @@ public class SASDataParser extends AbstractDataParser {
 		int count = 0;
 	    while(count < offset) {
 	      if(count<recordCount) {
-	    	 Object rows[] = sasFileReader.readNext();
+	    	sasFileReader.readNext();
 	        count++;
 	      } else {
 	        break;

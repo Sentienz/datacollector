@@ -18,10 +18,8 @@ public class SASXPTDataParser extends AbstractDataParser {
 	private List<Field> headers;
 	private List<Field> column_types;
 	private boolean isClosed;
-	private boolean alreadyParsed = false;
 	private String id;
-	private String offset;
-	private long recordCount;
+	private Integer offset;
 	private boolean eof;
 	long currentOffset;
 	
@@ -30,8 +28,7 @@ public class SASXPTDataParser extends AbstractDataParser {
 		this.sasXportFileIterator = sasXportFileIterator;
 		this.context = context;
 		this.id = id;
-		this.offset = offset;
-		this.recordCount = sasXportFileIterator.getRowCount();
+	    this.offset = Integer.parseInt(offset);
 		seekOffset();
 	}
 	
@@ -39,7 +36,6 @@ public class SASXPTDataParser extends AbstractDataParser {
 	public Record parse() throws IOException {
 		
 		Record record = null;
-		
 		if(eof==true) {
 			return null;
 		}
@@ -93,14 +89,12 @@ public class SASXPTDataParser extends AbstractDataParser {
 		LinkedHashMap<String, Field> listMap = new LinkedHashMap<>();
 		for (int i = 0; i < columnList.length; i++) {
 			String key;
-			String column_type;
 			Field header = (headers != null) ? headers.get(i) : null;
 			if (header != null) {
 				key = header.getValueAsString();
 			} else {
 				key = Integer.toString(i);
 			}
-			column_type = column_types.get(i).getValueAsString();
 			listMap.put(key,Field.create(Field.Type.STRING,rows.get(i)));
 			}
 			record.set(Field.createListMap(listMap));
@@ -109,11 +103,9 @@ public class SASXPTDataParser extends AbstractDataParser {
 
 	private void seekOffset() {
 		int count = 0;
-		int offset2=Integer.parseInt(offset);
-	    while(count < offset2-1) {
-	    	 List<String> rows = sasXportFileIterator.next();
+	    while(count < offset-1) {
+	    	sasXportFileIterator.next();
 	        count++;
-
 	    }	
 	}
 }
