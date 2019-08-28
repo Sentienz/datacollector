@@ -18,7 +18,8 @@ import com.streamsets.pipeline.lib.parser.DataParserFactory;
 
 public class SASParseFactory extends DataParserFactory {
 
-	public static final Set<Class<? extends Enum>> MODES = Collections.emptySet();
+	private static final String UTF_8 = "UTF-8";
+  public static final Set<Class<? extends Enum>> MODES = Collections.emptySet();
 	public static final Map<String, Object> CONFIGS = new HashMap<>();
 	private SasFileReader sasFileReader;
 
@@ -28,7 +29,7 @@ public class SASParseFactory extends DataParserFactory {
 
 	@Override
 	public DataParser getParser(String id, InputStream is, String offset) throws DataParserException {
-		sasFileReader = new SasFileReaderImpl(is);
+		sasFileReader = new SasFileReaderImpl(is,UTF_8);
 		return new SASDataParser(sasFileReader, getSettings().getContext(), id, offset);
 	}
 

@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.sentienz.sas.xpt.SASXportFileIterator;
 import com.sentienz.sas.xpt.XPTTypes.ReadStatVariable;
 import com.streamsets.pipeline.api.Field;
@@ -13,6 +15,7 @@ import com.streamsets.pipeline.lib.parser.AbstractDataParser;
 
 public class SASXPTDataParser extends AbstractDataParser {
 
+    private static final Logger logger = LoggerFactory.getLogger(SASXPTDataParser.class);
     private final ProtoConfigurableEntity.Context context;
 	private SASXportFileIterator sasXportFileIterator;
 	private List<Field> headers;
@@ -30,6 +33,7 @@ public class SASXPTDataParser extends AbstractDataParser {
 		this.id = id;
 		this.offset = offset;
 		this.recordCount = sasXportFileIterator.getRowCount();
+		logger.info("Initialized SASXPT parser successfully.");
 	}
 	
 	@Override
@@ -55,12 +59,14 @@ public class SASXPTDataParser extends AbstractDataParser {
 	@Override
 	public void close() throws IOException {
 		isClosed = true;
+		logger.info("Closed the SAS XPT Parser");
 	}
 	
 	private Record updateRecordsWithHeader(Record record) throws IOException {
 		
 	    if(!sasXportFileIterator.hasNext()) {
 	      eof = true;
+	      logger.info("Reached the end of file");
 	      return null;
         }
         
@@ -88,8 +94,6 @@ public class SASXPTDataParser extends AbstractDataParser {
 		
 		record.set(Field.createListMap(listMap));
 		return record;
-
-
 	}	
 	
 }
