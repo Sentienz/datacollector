@@ -20,7 +20,8 @@ import com.streamsets.pipeline.lib.parser.Errors;
 
 public class SASParseFactory extends DataParserFactory {
 
-	public static final Set<Class<? extends Enum>> MODES = Collections.emptySet();
+	private static final String UTF_8 = "UTF-8";
+  public static final Set<Class<? extends Enum>> MODES = Collections.emptySet();
 	public static final Map<String, Object> CONFIGS = new HashMap<>();
 	private SasFileReader sasFileReader;
 
@@ -30,6 +31,7 @@ public class SASParseFactory extends DataParserFactory {
 
 	@Override
 	public DataParser getParser(String id, InputStream is, String offset) throws DataParserException {
+<<<<<<< HEAD
 		try {
 			sasFileReader = new SasFileReaderImpl(is);
 			return new SASDataParser(sasFileReader, getSettings().getContext(), id, offset);
@@ -38,6 +40,11 @@ public class SASParseFactory extends DataParserFactory {
 	    }
 		}
 	
+=======
+		sasFileReader = new SasFileReaderImpl(is,UTF_8);
+		return new SASDataParser(sasFileReader, getSettings().getContext(), id, offset);
+	}
+>>>>>>> SAS-3.8.1-test
 
 	@Override
 	public DataParser getParser(String id, Reader reader, long offset) throws DataParserException {
