@@ -98,13 +98,13 @@ public abstract class FTPRemoteConnector extends RemoteConnector {
 
     // VFS uses null to indicate no timeout (whereas we use 0)
     if (remoteConfig.socketTimeout > 0) {
-      configBuilder.setSoTimeout(options, remoteConfig.socketTimeout * 1000);
+      FtpFileSystemConfigBuilder.getInstance().setSoTimeout(options, remoteConfig.socketTimeout * 1000);
     }
     if (remoteConfig.connectionTimeout > 0) {
-      configBuilder.setConnectTimeout(options, remoteConfig.connectionTimeout * 1000);
+      FtpFileSystemConfigBuilder.getInstance().setConnectTimeout(options, remoteConfig.connectionTimeout * 1000);
     }
     if (remoteConfig.dataTimeout > 0) {
-      configBuilder.setDataTimeout(options, remoteConfig.dataTimeout * 1000);
+      FtpFileSystemConfigBuilder.getInstance().setDataTimeout(options, remoteConfig.dataTimeout * 1000);
     }
 
     // Only actually try to connect and authenticate if there were no issues
