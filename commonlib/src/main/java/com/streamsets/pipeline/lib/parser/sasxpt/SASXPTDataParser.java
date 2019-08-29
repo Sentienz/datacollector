@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.sentienz.sas.xpt.SASXportFileIterator;
 import com.sentienz.sas.xpt.XPTTypes.ReadStatVariable;
 import com.streamsets.pipeline.api.Field;
@@ -13,7 +15,8 @@ import com.streamsets.pipeline.lib.parser.AbstractDataParser;
 
 public class SASXPTDataParser extends AbstractDataParser {
 
-    private final ProtoConfigurableEntity.Context context;
+	private static final Logger logger = LoggerFactory.getLogger(SASXPTDataParser.class);
+	private final ProtoConfigurableEntity.Context context;
 	private SASXportFileIterator sasXportFileIterator;
 	private List<Field> headers;
 	private List<Field> column_types;
@@ -24,23 +27,24 @@ public class SASXPTDataParser extends AbstractDataParser {
 	private long recordCount;
 	private boolean eof;
 	long currentOffset;
-	
-	public SASXPTDataParser(SASXportFileIterator sasXportFileIterator, ProtoConfigurableEntity.Context context, String id,
-			String offset) {
+
+	public SASXPTDataParser(SASXportFileIterator sasXportFileIterator, ProtoConfigurableEntity.Context context,
+			String id, String offset) {
 		this.sasXportFileIterator = sasXportFileIterator;
 		this.context = context;
 		this.id = id;
 		this.offset = offset;
 		this.recordCount = sasXportFileIterator.getRowCount();
 		seekOffset();
+
 	}
-	
+
 	@Override
 	public Record parse() throws IOException {
-		
+
 		Record record = null;
-		
-		if(eof==true) {
+
+		if (eof == true) {
 			return null;
 		}
 		if (isClosed) {
@@ -49,47 +53,48 @@ public class SASXPTDataParser extends AbstractDataParser {
 		record = updateRecordsWithHeader(record);
 		return record;
 	}
-	
+
 	@Override
-	public String getOffset(){
-	  return eof ? String.valueOf(-1) : Long.toString(sasXportFileIterator.getOffset());
+	public String getOffset() {
+		return eof ? String.valueOf(-1) : Long.toString(sasXportFileIterator.getOffset());
 	}
-	
+
 	@Override
 	public void close() throws IOException {
 		isClosed = true;
+		logger.info("Closed the SAS XPT Parser");
 	}
-	
+
 	private Record updateRecordsWithHeader(Record record) throws IOException {
-		 		
-	    currentOffset = sasXportFileIterator.getOffset();
-		if(!sasXportFileIterator.hasNext()) {
-		      eof = true;
-	        }
-        
-	    record = context.createRecord(id + "::" + currentOffset);
-		List<String> rows = sasXportFileIterator.next();
-		
-		try {
-			if(rows.size()==0 || rows==null) {
-				eof = true;
+
+		if (!sasXportFileIterator.hasNext()) {
+			eof = true;
+			logger.info("Reached the end of file");
 			return null;
-			}
 		}
-		catch(Exception e) {
-			eof=true;
+
+		record = context.createRecord(id + "::" + currentOffset);
+		List<String> rows = sasXportFileIterator.next();
+
+		try {
+			if (rows.size() == 0 || rows == null) {
+				eof = true;
+				return null;
+			}
+		} catch (Exception e) {
+			eof = true;
 			return null;
-			
+
 		}
 		headers = new ArrayList<Field>();
 		column_types = new ArrayList<Field>();
 
 		ReadStatVariable[] columnList = sasXportFileIterator.getMetaData().variables;
-		for(ReadStatVariable col : columnList) {
+		for (ReadStatVariable col : columnList) {
 			headers.add(Field.create(col.name));
 			column_types.add(Field.create(col.type.toString().substring(14)));
 		}
-		
+
 		LinkedHashMap<String, Field> listMap = new LinkedHashMap<>();
 		for (int i = 0; i < columnList.length; i++) {
 			String key;
@@ -101,19 +106,19 @@ public class SASXPTDataParser extends AbstractDataParser {
 				key = Integer.toString(i);
 			}
 			column_type = column_types.get(i).getValueAsString();
-			listMap.put(key,Field.create(Field.Type.STRING,rows.get(i)));
-			}
-			record.set(Field.createListMap(listMap));
+			listMap.put(key, Field.create(Field.Type.STRING, rows.get(i)));
+		}
+		record.set(Field.createListMap(listMap));
 		return record;
 	}
 
 	private void seekOffset() {
 		int count = 0;
-		int offset2=Integer.parseInt(offset);
-	    while(count < offset2-1) {
-	    	 List<String> rows = sasXportFileIterator.next();
-	        count++;
+		int offset2 = Integer.parseInt(offset);
+		while (count < offset2 - 1) {
+			List<String> rows = sasXportFileIterator.next();
+			count++;
 
-	    }	
+		}
 	}
 }
