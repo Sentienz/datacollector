@@ -218,6 +218,23 @@ public class RemoteConfigBean {
   )
   public CredentialValue ftpsClientCertKeystorePassword = () -> "";
 
+  
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.MODEL,
+      defaultValue = "ALLOW_ALL",
+      label = "FTPS Truststore Provider",
+      description = "Providing a Truststore allows the client to verify the FTPS Server's certificate. " +
+          "\"Allow All\" will allow any certificate, skipping validation. " +
+          "\"File\" will allow providing a truststore file containing the certificate. " +
+          "\"JVM Default\" will use the JVM's default truststore.",
+      displayPosition = 80,
+      group = "#1"
+  )
+  @ValueChooserModel(FTPSTrustStoreChooserValues.class)
+  public FTPSTrustStore ftpsTrustStoreProvider = FTPSTrustStore.ALLOW_ALL;
+  
+  
   @ConfigDef(
       required = true,
       type = ConfigDef.Type.STRING,
