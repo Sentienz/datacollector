@@ -1,3 +1,4 @@
+
 package com.streamsets.pipeline.lib.parser.sasxpt;
 
 import com.epam.parso.SasFileReader;
@@ -38,9 +39,7 @@ public class TestSASXPTDataParser {
         DataParser parser = new SASXPTDataParser(iterator, getContext(), "id","0");
         Assert.assertEquals(1, Long.parseLong(parser.getOffset()));
         Record record = parser.parse();
-        System.out.print(record);
         Assert.assertNotNull(record);
-        System.out.print(record);
         Assert.assertEquals("id::1", record.getHeader().getSourceId());
         Assert.assertEquals("Allanson, Andy", record.get().getValueAsList().get(0).getValueAsString());
         Assert.assertEquals(2, Long.parseLong(parser.getOffset()));
@@ -67,8 +66,6 @@ public class TestSASXPTDataParser {
         Assert.assertNotNull(record);
         Assert.assertEquals("Salazar, Argenis", record.get().getValueAsList().get(0).getValueAsString());
         Assert.assertEquals(9, Long.parseLong(parser.getOffset()));
-        System.out.print(record);
-
         parser.close();
 
     }
@@ -83,12 +80,11 @@ public class TestSASXPTDataParser {
         Record record = parser.parse();
         Assert.assertNotNull(record);
         Assert.assertEquals("id::532", record.getHeader().getSourceId());
-        Assert.assertEquals("7220.0", record.get().getValueAsList().get(3).getValueAsString());
+        Assert.assertEquals("", record.get().getValueAsList().get(3).getValueAsString());
         Assert.assertEquals(533, Long.parseLong(parser.getOffset()));
         record = parser.parse();
         Assert.assertNotNull(record);
-        System.out.print(record);
-        Assert.assertEquals("96.0", record.get().getValueAsList().get(6).getValueAsString());
+        Assert.assertEquals("", record.get().getValueAsList().get(6).getValueAsString());
         Assert.assertEquals(534, Long.parseLong(parser.getOffset()));
         record = parser.parse();
         Assert.assertEquals(-1, Long.parseLong(parser.getOffset()));

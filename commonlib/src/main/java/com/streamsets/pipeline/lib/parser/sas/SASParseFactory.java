@@ -20,7 +20,6 @@ import com.streamsets.pipeline.lib.parser.Errors;
 
 public class SASParseFactory extends DataParserFactory {
 
-	private static final String ISO = "ISO-8859-1";
 	public static final Set<Class<? extends Enum>> MODES = Collections.emptySet();
 	public static final Map<String, Object> CONFIGS = new HashMap<>();
 	private SasFileReader sasFileReader;
@@ -31,17 +30,19 @@ public class SASParseFactory extends DataParserFactory {
 
 	@Override
 	public DataParser getParser(String id, InputStream is, String offset) throws DataParserException {
-
-		sasFileReader = new SasFileReaderImpl(is,ISO);
 		try {
+		sasFileReader = new SasFileReaderImpl(is);
+	
 			return new SASDataParser(sasFileReader, getSettings().getContext(), id, offset);
 		} catch (IOException e) {
-			throw new DataParserException(Errors.DATA_PARSER_01, e.toString(), e);
+		      throw new DataParserException(Errors.DATA_PARSER_01, e.toString(), e);
+	    }
 		}
-	}
+	
 
 	@Override
 	public DataParser getParser(String id, Reader reader, long offset) throws DataParserException {
 		throw new UnsupportedOperationException();
 	}
+
 }

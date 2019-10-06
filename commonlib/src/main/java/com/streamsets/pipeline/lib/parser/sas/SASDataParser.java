@@ -2,11 +2,10 @@ package com.streamsets.pipeline.lib.parser.sas;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.sql.Date;
-import java.sql.Time;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.epam.parso.Column;
 import com.epam.parso.SasFileProperties;
@@ -23,10 +22,7 @@ public class SASDataParser extends AbstractDataParser {
 	private SasFileReader sasFileReader;
 	private SasFileProperties sasFileProperties;
 	private List<Field> headers;
-	private static final String OFFSET_MINUS_ONE = "-1";
-	private static final String OFFSET_ZERO = "0";
 	private boolean isClosed;
-	private boolean alreadyParsed = false;
 	private String id;
 	private int offset;
 	private long recordCount;
@@ -69,18 +65,14 @@ public class SASDataParser extends AbstractDataParser {
 	}
 	
 	private Record updateRecordsWithHeader(Record record) throws IOException {
+		Field field;
 		currentOffset = Integer.valueOf(sasFileReader.getOffset());	
 		record = context.createRecord(id + "::" + currentOffset);
 		Object rows[] = sasFileReader.readNext();
-		try {
-			if(rows.length==0 || rows==null) {
+
+			if(rows==null) {
 				eof = true;
-			return null;
-			}
-		}
-		catch(Exception e) {
-			eof=true;
-			return null;
+			return null;	
 		}
 		
 		if(Integer.parseInt(getOffset())>recordCount) {
@@ -103,9 +95,13 @@ public class SASDataParser extends AbstractDataParser {
 			else {
 				key = Integer.toString(i);
 			}
-			listMap.put(key,Field.create(Field.Type.STRING,rows[i]));	
+			if(rows[i]==null) {
+				listMap.put(key,Field.create(Field.Type.STRING,""));
 			}
-		
+			else {
+				listMap.put(key,Field.create(Field.Type.STRING,rows[i]));	
+			}
+		}
 		record.set(Field.createListMap(listMap));
 		
 	return record;
@@ -121,5 +117,8 @@ public class SASDataParser extends AbstractDataParser {
 	        break;
 	      }
 	    }
-	}		
+	}
+
+
+		
 }

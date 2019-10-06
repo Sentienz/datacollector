@@ -169,7 +169,7 @@ public class SDCClassLoader extends BlackListURLClassLoader {
           if (jarName.contains("-protolib-")) {
             // adding only protolib jars
             protolibJars.add(url);
-          } else if (jarName.contains(stageLibName)) {
+          } else if (jarName.contains(stageLibName) && stageLibjars.size()==0) {
             stageLibjars.add(url);
           } else {
             otherJars.add(url);
@@ -182,7 +182,7 @@ public class SDCClassLoader extends BlackListURLClassLoader {
       }
     }
     List<URL> allJars = new ArrayList<>();
-    if (stageLibjars.size() != 1) {
+    if (stageLibjars.size() != 1) {    	
       throw new ExceptionInInitializerError("Expected exactly 1 stage lib jar but found " + stageLibjars.size() +
           " with name " + stageLibName);
     }

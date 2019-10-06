@@ -45,7 +45,6 @@ import java.util.List;
  */
 public abstract class SFTPRemoteConnector extends RemoteConnector {
 
-  private static final String SSH_CONNECT_TIMEOUT_ENV = "ssh.connectTimeout";
   private static final Logger LOG = LoggerFactory.getLogger(SFTPRemoteConnector.class);
   public static final String SCHEME = "sftp";
   public static final int DEFAULT_PORT = 22;
@@ -81,17 +80,7 @@ public abstract class SFTPRemoteConnector extends RemoteConnector {
         new NoneCompression.Factory()));
     sshClient = new SSHClient(sshConfig);
     sshClientRebuilder.setConfig(sshConfig);
-    
-    String connTimeout = System.getenv(SSH_CONNECT_TIMEOUT_ENV);
-    if(connTimeout!=null && !connTimeout.isEmpty()) {
-      try {
-      int connectTimeout = Integer.parseInt(connTimeout);
-      sshClient.setConnectTimeout(connectTimeout);
-      }catch(NumberFormatException nfe) {
-        LOG.error(String.format("%s value %s invalid, skipping the timeout",SSH_CONNECT_TIMEOUT_ENV,connTimeout));
-      }
-    }
-    
+
 
     if (remoteConfig.strictHostChecking) {
       if (knownHostsFile != null) {
