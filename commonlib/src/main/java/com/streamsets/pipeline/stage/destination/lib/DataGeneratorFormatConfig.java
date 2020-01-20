@@ -38,6 +38,7 @@ import com.streamsets.pipeline.config.DestinationAvroSchemaSource;
 import com.streamsets.pipeline.config.DestinationAvroSchemaSourceChooserValues;
 import com.streamsets.pipeline.config.JsonMode;
 import com.streamsets.pipeline.config.JsonModeChooserValues;
+import com.streamsets.pipeline.config.SASCharsetChooserValues;
 import com.streamsets.pipeline.config.TextFieldMissingAction;
 import com.streamsets.pipeline.config.TextFieldMissingActionChooserValues;
 import com.streamsets.pipeline.config.WholeFileExistsAction;
@@ -102,6 +103,21 @@ public class DataGeneratorFormatConfig implements DataFormatConfig {
   )
   @ValueChooserModel(CharsetChooserValues.class)
   public String charset;
+  
+  /* Charset - SAS & SASXPT */
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.MODEL,
+      defaultValue = "UTF-8",
+      label = "Charset",
+      displayPosition = 999,
+      group = "DATA_FORMAT",
+      dependsOn = "dataFormat^",
+      triggeredByValue = {"SAS","SASXPT"}
+  )
+  @ValueChooserModel(SASCharsetChooserValues.class)
+  public String SAScharset = "UTF-8";
+
 
   /* End Charset Related */
 
@@ -655,21 +671,41 @@ public class DataGeneratorFormatConfig implements DataFormatConfig {
     }
 
     Charset cSet;
-    try {
-      cSet = Charset.forName(charset);
-    } catch (UnsupportedCharsetException ex) {
-      // setting it to a valid one so the parser factory can be configured and tested for more errors
-      cSet = StandardCharsets.UTF_8;
-      issues.add(
-          context.createConfigIssue(
-              groupName,
-              configPrefix + ".charset",
-              DataFormatErrors.DATA_FORMAT_05, charset
-          )
-      );
-      valid = false;
+    switch(dataFormat) {
+    case SAS:
+    case SASXPT:
+    	try {
+    	      cSet = Charset.forName(SAScharset);
+    	    } catch (UnsupportedCharsetException ex) {
+    	      // setting it to a valid one so the parser factory can be configured and tested for more errors
+    	      cSet = StandardCharsets.UTF_8;
+    	      issues.add(
+    	          context.createConfigIssue(
+    	              groupName,
+    	              configPrefix + ".charset",
+    	              DataFormatErrors.DATA_FORMAT_05, SAScharset
+    	          )
+    	      );
+    	      valid = false;
+    	    }
+    	break;
+    	default:
+    		try {
+    		      cSet = Charset.forName(charset);
+    		    } catch (UnsupportedCharsetException ex) {
+    		      // setting it to a valid one so the parser factory can be configured and tested for more errors
+    		      cSet = StandardCharsets.UTF_8;
+    		      issues.add(
+    		          context.createConfigIssue(
+    		              groupName,
+    		              configPrefix + ".charset",
+    		              DataFormatErrors.DATA_FORMAT_05, charset
+    		          )
+    		      );
+    		      valid = false;
+    		    }
     }
-
+    
     builder.setCharset(cSet);
 
     switch (dataFormat) {

@@ -38,6 +38,6 @@ public class DataFormatChooserValues extends BaseEnumChooserValues<DataFormat> {
       DataFormat.XML,
       DataFormat.SAS,
       DataFormat.SASXPT
-    );
+      );
   }
 }

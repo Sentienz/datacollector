@@ -138,5 +138,7 @@ public class DataFactoryBuilder<B extends DataFactoryBuilder, DF extends DataFac
     return format.create(settings);
   }
 
-
+public  Charset getCharset() {
+	return charset;
+}
 }

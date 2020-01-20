@@ -35,10 +35,11 @@ public class TestSASXPTDataParser {
     @Test
     public void TestSASXPT() throws Exception {
 
-        SASXportFileIterator iterator = new SASXportFileIterator(inputStream);
+        SASXportFileIterator iterator = new SASXportFileIterator(inputStream,"windows-1252");
         DataParser parser = new SASXPTDataParser(iterator, getContext(), "id","0");
         Assert.assertEquals(1, Long.parseLong(parser.getOffset()));
         Record record = parser.parse();
+        System.out.println(record);
         Assert.assertNotNull(record);
         Assert.assertEquals("id::1", record.getHeader().getSourceId());
         Assert.assertEquals("Allanson, Andy", record.get().getValueAsList().get(0).getValueAsString());

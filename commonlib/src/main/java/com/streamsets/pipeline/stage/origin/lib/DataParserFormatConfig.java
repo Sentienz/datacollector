@@ -26,6 +26,7 @@ import com.streamsets.pipeline.api.ValueChooserModel;
 import com.streamsets.pipeline.common.DataFormatConstants;
 import com.streamsets.pipeline.config.AvroSchemaLookupMode;
 import com.streamsets.pipeline.config.CharsetChooserValues;
+import com.streamsets.pipeline.config.SASCharsetChooserValues;
 import com.streamsets.pipeline.config.Compression;
 import com.streamsets.pipeline.config.CompressionChooserValues;
 import com.streamsets.pipeline.config.CsvHeader;
@@ -147,6 +148,20 @@ public class DataParserFormatConfig implements DataFormatConfig {
   )
   @ValueChooserModel(CharsetChooserValues.class)
   public String charset = "UTF-8";
+
+  /* Charset - SAS & SASXPT */
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.MODEL,
+      defaultValue = "UTF-8",
+      label = "Charset",
+      displayPosition = 999,
+      group = "DATA_FORMAT",
+      dependsOn = "dataFormat^",
+      triggeredByValue = {"SAS","SASXPT"}
+  )
+  @ValueChooserModel(SASCharsetChooserValues.class)
+  public String SAScharset = "UTF-8";
 
   @ConfigDef(
       required = true,
@@ -1077,6 +1092,7 @@ public class DataParserFormatConfig implements DataFormatConfig {
   // The default value is 1 for regular origins. Multithreaded origins should override this value as required.
   public int stringBuilderPoolSize = DataFormatConstants.STRING_BUILDER_POOL_SIZE;
 
+
   @Override
   public boolean init(
       ProtoConfigurableEntity.Context context,
@@ -1463,27 +1479,52 @@ public class DataParserFormatConfig implements DataFormatConfig {
     DataParserFactoryBuilder builder = new DataParserFactoryBuilder(context, dataFormat.getParserFormat());
     Charset fileCharset;
 
-    try {
-      fileCharset = Charset.forName(charset);
-    } catch (UnsupportedCharsetException ignored) { // NOSONAR
-      // setting it to a valid one so the parser factory can be configured and tested for more errors
-      fileCharset = StandardCharsets.UTF_8;
-      issues.add(
-          context.createConfigIssue(
-              stageGroup,
-              configPrefix + "charset",
-              DataFormatErrors.DATA_FORMAT_05,
-              charset
-          )
-      );
-      valid = false;
+    switch(dataFormat) {
+    case SAS:
+    case SASXPT:
+
+    	  try {
+    	    	fileCharset = Charset.forName(SAScharset);
+    	      } catch (UnsupportedCharsetException ignored) { // NOSONAR
+    	    	// setting it to a valid one so the parser factory can be configured and tested for more errors
+    			  fileCharset = StandardCharsets.UTF_8;
+    			      issues.add(
+    			          context.createConfigIssue(
+    			              stageGroup,
+    			              configPrefix + "charset",
+    			              DataFormatErrors.DATA_FORMAT_05,
+    			              SAScharset
+    			          )
+    			      );
+    			      valid = false;
+    			    }
+    break;
+    default:
+    	  try {
+    	    	fileCharset = Charset.forName(charset);
+    	      } catch (UnsupportedCharsetException ignored) { // NOSONAR
+    	    	// setting it to a valid one so the parser factory can be configured and tested for more errors
+    			  fileCharset = StandardCharsets.UTF_8;
+    			      issues.add(
+    			          context.createConfigIssue(
+    			              stageGroup,
+    			              configPrefix + "charset",
+    			              DataFormatErrors.DATA_FORMAT_05,
+    			              charset
+    			          )
+    			      );
+    			      valid = false;
+    			    }
     }
+  
+
+
     builder.setCharset(fileCharset);
     builder.setOverRunLimit(overrunLimit);
     builder.setRemoveCtrlChars(removeCtrlChars);
     builder.setCompression(compression);
     builder.setFilePatternInArchive(filePatternInArchive);
-
+   
     switch (dataFormat) {
       case TEXT:
         buildTextParser(builder, multiLines);
@@ -1550,7 +1591,7 @@ public class DataParserFormatConfig implements DataFormatConfig {
     return valid;
   }
 
-  private void buildAvroParser(DataParserFactoryBuilder builder) {
+private void buildAvroParser(DataParserFactoryBuilder builder) {
     builder
         .setMaxDataLen(-1)
         .setConfig(SCHEMA_KEY, avroSchema)
@@ -1657,7 +1698,7 @@ public class DataParserFormatConfig implements DataFormatConfig {
 	  builder
           .setMaxDataLen(-1);
   }
-
+  
   /**
    * Returns the DataParserFactory instance.
    *

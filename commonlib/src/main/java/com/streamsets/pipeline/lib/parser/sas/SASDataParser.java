@@ -1,11 +1,9 @@
 package com.streamsets.pipeline.lib.parser.sas;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import com.epam.parso.Column;
 import com.epam.parso.SasFileProperties;
@@ -28,6 +26,7 @@ public class SASDataParser extends AbstractDataParser {
 	private long recordCount;
 	private boolean eof;
 	int currentOffset;
+	List<Column> columnlist;
 
 	public SASDataParser(SasFileReader sasFileReader, ProtoConfigurableEntity.Context context, String id,
 			String offset) throws DataParserException, IOException {
@@ -37,6 +36,7 @@ public class SASDataParser extends AbstractDataParser {
 		this.offset = Integer.parseInt(offset);
 		this.sasFileProperties = sasFileReader.getSasFileProperties();
 		this.recordCount = sasFileProperties.getRowCount();
+		this.columnlist = sasFileReader.getColumns();
 		seekOffset();
 		}																																																																																	
 
@@ -50,58 +50,49 @@ public class SASDataParser extends AbstractDataParser {
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
+
 		record = updateRecordsWithHeader(record);
 		return record;
 	}
 
 	@Override
-	public void close() throws IOException {
-		isClosed = true;
-	}
-	
-	@Override
 	public String getOffset() throws  IOException {
 		  return eof ? String.valueOf(-1) : sasFileReader.getOffset().toString();
 	}
 	
+	@Override
+	public void close() throws IOException {
+		isClosed = true;
+	}
+	
+	
+	
 	private Record updateRecordsWithHeader(Record record) throws IOException {
-		Field field;
 		currentOffset = Integer.valueOf(sasFileReader.getOffset());	
 		record = context.createRecord(id + "::" + currentOffset);
 		Object rows[] = sasFileReader.readNext();
-
-			if(rows==null) {
-				eof = true;
-			return null;	
-		}
 		
-		if(Integer.parseInt(getOffset())>recordCount) {
-			eof=true;
+		if(rows==null || rows.length==0) {
+			eof = true;
+			return null;
 		}
-		
-		List<Column> columnlist = sasFileReader.getColumns();
+	
 		headers = new ArrayList<Field>();
 		for(Column col :sasFileReader.getColumns()) {
 			headers.add(Field.create(col.getName()));
 		}		
 		
 		LinkedHashMap<String,Field> listMap = new LinkedHashMap<String,Field>();
+		
 		for(int i = 0; i<columnlist.size();i++) {
-			String key;
-			Field header = (headers!=null)?headers.get(i):null;
-			if(headers!=null) {
-				key=header.getValueAsString();
-			}
-			else {
-				key = Integer.toString(i);
-			}
+			Field header = headers.get(i);
+			String key=header.getValueAsString();
 			if(rows[i]==null) {
 				listMap.put(key,Field.create(Field.Type.STRING,""));
 			}
-			else {
-				listMap.put(key,Field.create(Field.Type.STRING,rows[i]));	
+			listMap.put(key,Field.create(Field.Type.STRING,rows[i]));	
 			}
-		}
+		
 		record.set(Field.createListMap(listMap));
 		
 	return record;
@@ -117,8 +108,5 @@ public class SASDataParser extends AbstractDataParser {
 	        break;
 	      }
 	    }
-	}
-
-
-		
+	}		
 }

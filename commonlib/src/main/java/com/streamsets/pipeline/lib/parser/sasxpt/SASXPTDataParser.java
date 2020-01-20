@@ -44,8 +44,14 @@ public class SASXPTDataParser extends AbstractDataParser {
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
+		if(sasXportFileIterator.hasNext()) {
 		record = updateRecordsWithHeader(record);
 		return record;
+		}
+		else {
+			eof=true;
+			return null;
+		}
 	}
 	
 	@Override
@@ -61,9 +67,6 @@ public class SASXPTDataParser extends AbstractDataParser {
 	private Record updateRecordsWithHeader(Record record) throws IOException {
 		 		
 	    currentOffset = sasXportFileIterator.getOffset();
-		if(!sasXportFileIterator.hasNext()) {
-		      eof = true;
-	        }
         
 	    record = context.createRecord(id + "::" + currentOffset);
 		List<String> rows = sasXportFileIterator.next();
@@ -72,8 +75,6 @@ public class SASXPTDataParser extends AbstractDataParser {
 				eof = true;
 			return null;
 			}
-			
-			
 	
 		headers = new ArrayList<Field>();
 
@@ -84,13 +85,14 @@ public class SASXPTDataParser extends AbstractDataParser {
 		
 		LinkedHashMap<String, Field> listMap = new LinkedHashMap<>();
 		for (int i = 0; i < columnList.length; i++) {
-			String key;
+
 			Field header = (headers != null) ? headers.get(i) : null;
-			if (header != null) {
-				key = header.getValueAsString();
-			} else {
-				key = Integer.toString(i);
-			}
+			String key = header.getValueAsString();
+//			if (header != null) {
+//				
+//			} else {
+//				key = Integer.toString(i);
+//			}
 			listMap.put(key,Field.create(Field.Type.STRING,rows.get(i)));
 			}
 			record.set(Field.createListMap(listMap));

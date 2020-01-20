@@ -28,9 +28,10 @@ public class SASXPTParseFactory extends DataParserFactory {
 	@Override
 	public DataParser getParser(String id, InputStream is, String offset)  throws DataParserException {
 		SASXportFileIterator sasXportFileIterator = null;
-		
+
+		String charset = getSettings().getCharset().toString();
 		try {
-			sasXportFileIterator = new SASXportFileIterator(is);
+			sasXportFileIterator = new SASXportFileIterator(is,charset);
 		}
 		catch (Exception e) {
 		  LOG.error("Error has occured while initiating file reader",e);
