@@ -30,8 +30,7 @@ class Cells {
 
 	static Field parseCell(Cell cell, FormulaEvaluator evaluator) throws ExcelUnsupportedCellTypeException {
 		CellType cellType = cell.getCellTypeEnum();
-		// set the cellType of a formula cell to its cached formula result type in order
-		// to process it as its result type
+		// set the cellType of a formula cell to its cached formula result type in order to process it as its result type
 		boolean isFormula = cell.getCellTypeEnum().equals(CellType.FORMULA);
 		if (isFormula) {
 			cellType = cell.getCachedFormulaResultTypeEnum();
@@ -58,8 +57,7 @@ class Cells {
 				return rawValue < 1 ? Field.createTime(dt) : Field.createDate(dt);
 			}
 
-			// some machinations to handle integer values going in without decimal vs. with
-			// .0 for rawValue
+			// some machinations to handle integer values going in without decimal vs. with .0 for rawValue
 			return Field.create(numericallyEquivalent ? new BigDecimal(displayValue) : BigDecimal.valueOf(rawValue));
 
 		case BOOLEAN:
