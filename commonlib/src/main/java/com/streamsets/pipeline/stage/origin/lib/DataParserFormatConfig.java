@@ -1486,8 +1486,7 @@ public class DataParserFormatConfig implements DataFormatConfig {
 			try {
 				fileCharset = Charset.forName(SAScharset);
 			} catch (UnsupportedCharsetException ignored) { // NOSONAR
-				// setting it to a valid one so the parser factory can be configured and tested
-				// for more errors
+				// setting it to a valid one so the parser factory can be configured and tested for more errors
 				fileCharset = StandardCharsets.UTF_8;
 				issues.add(context.createConfigIssue(stageGroup, configPrefix + "charset", DataFormatErrors.DATA_FORMAT_05,
 						SAScharset));
@@ -1498,8 +1497,7 @@ public class DataParserFormatConfig implements DataFormatConfig {
 			try {
 				fileCharset = Charset.forName(charset);
 			} catch (UnsupportedCharsetException ignored) { // NOSONAR
-				// setting it to a valid one so the parser factory can be configured and tested
-				// for more errors
+				// setting it to a valid one so the parser factory can be configured and tested for more errors
 				fileCharset = StandardCharsets.UTF_8;
 				issues.add(
 						context.createConfigIssue(stageGroup, configPrefix + "charset", DataFormatErrors.DATA_FORMAT_05, charset));
