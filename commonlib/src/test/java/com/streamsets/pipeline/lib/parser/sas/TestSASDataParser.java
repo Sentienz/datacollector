@@ -20,90 +20,87 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.io.FileInputStream;
 
-
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TestSASDataParser {
 
-
 	InputStream is = getClass().getClassLoader().getResourceAsStream("samp1.sas7bdat");
 
+	public TestSASDataParser() throws FileNotFoundException {
+	}
 
-    public TestSASDataParser() throws FileNotFoundException {
-    }
+	private Stage.Context getContext() {
+		return ContextInfoCreator.createSourceContext("i", true, OnRecordError.TO_ERROR, Collections.emptyList());
+	}
 
-    private Stage.Context getContext() {
-        return ContextInfoCreator.createSourceContext("i", true, OnRecordError.TO_ERROR, Collections.emptyList());
-    }
+	@Test
+	public void TestSAS() throws Exception {
 
-    @Test
-    public void TestSAS() throws Exception {
+		SasFileReader sasFileReader = new SasFileReaderImpl(is, "UTF-8");
+		DataParser parser = new SASDataParser(sasFileReader, getContext(), "id", "0");
+		Assert.assertEquals(0, Long.parseLong(parser.getOffset()));
+		Record record = parser.parse();
+		System.out.print(record);
+		Assert.assertNotNull(record);
+		Assert.assertEquals("id::0", record.getHeader().getSourceId());
+		Assert.assertEquals("AAAA", record.get().getValueAsList().get(5).getValueAsString());
+		Assert.assertEquals(1, Long.parseLong(parser.getOffset()));
+		record = parser.parse();
+		Assert.assertNotNull(record);
+	}
 
-        SasFileReader sasFileReader = new SasFileReaderImpl(is,"UTF-8");
-        DataParser parser = new SASDataParser(sasFileReader , getContext(),"id" , "0");
-        Assert.assertEquals(0, Long.parseLong(parser.getOffset()));
-        Record record = parser.parse();
-        System.out.print(record);
-        Assert.assertNotNull(record);    
-        Assert.assertEquals("id::0", record.getHeader().getSourceId());   
-        Assert.assertEquals("AAAA", record.get().getValueAsList().get(5).getValueAsString());
-        Assert.assertEquals(1,Long.parseLong(parser.getOffset())); 
-        record = parser.parse();
-        Assert.assertNotNull(record);
-    }
+	@Test
+	public void TestSASwithOffset() throws Exception {
 
-    
-    @Test
-    public void TestSASwithOffset() throws Exception {
+		SasFileReader sasFileReader = new SasFileReaderImpl(is);
+		DataParser parser = new SASDataParser(sasFileReader, getContext(), "id", "5");
+		Assert.assertEquals(5, Long.parseLong(parser.getOffset()));
+		Record record = parser.parse();
+		System.out.print(record);
+		Assert.assertNotNull(record);
+		Assert.assertEquals("ffffffff", record.get().getValueAsList().get(0).getValueAsString());
+		Assert.assertEquals("id::5", record.getHeader().getSourceId());
+		Assert.assertEquals(6, Long.parseLong(parser.getOffset()));
+		record = parser.parse();
+		Assert.assertEquals(7, Long.parseLong(parser.getOffset()));
 
-        SasFileReader sasFileReader = new SasFileReaderImpl(is);
-        DataParser parser = new SASDataParser(sasFileReader , getContext(),"id" , "5");
-        Assert.assertEquals(5, Long.parseLong(parser.getOffset()));
-        Record record = parser.parse();
-        System.out.print(record);
-        Assert.assertNotNull(record);
-        Assert.assertEquals("ffffffff", record.get().getValueAsList().get(0).getValueAsString());   
-        Assert.assertEquals("id::5", record.getHeader().getSourceId());       
-        Assert.assertEquals(6,Long.parseLong(parser.getOffset()));  
-        record = parser.parse();
-        Assert.assertEquals(7, Long.parseLong(parser.getOffset()));
-     
-    }
-    @Test
-    public void TestSASLastOffset() throws Exception {
+	}
 
-        SasFileReader sasFileReader = new SasFileReaderImpl(is);
-        DataParser parser = new SASDataParser(sasFileReader , getContext(),"id" , "49");
-        Assert.assertEquals(49, Long.parseLong(parser.getOffset()));
-        Record record = parser.parse();
-        System.out.print(record);
-        Assert.assertNotNull(record);
-        Assert.assertEquals("zzzzzzzz", record.get().getValueAsList().get(0).getValueAsString());   
-        Assert.assertEquals("id::49", record.getHeader().getSourceId());       
-        Assert.assertEquals(50,Long.parseLong(parser.getOffset()));  
-        record = parser.parse();
-        Assert.assertEquals(-1, Long.parseLong(parser.getOffset()));
-        record = parser.parse();
-        Assert.assertNull(record);
-    }
+	@Test
+	public void TestSASLastOffset() throws Exception {
 
-    
-    
-    @Test
-    public void testgetOffset() throws NumberFormatException, DataParserException, IOException {
-    	SasFileReader sasFileReader = new SasFileReaderImpl(is); ;
-        DataParser parser = new SASDataParser(sasFileReader , getContext(),"0" , "43");
-        Assert.assertEquals(43, Long.parseLong(parser.getOffset()));  
-    }
-    
-    @Test(expected = IOException.class)
-    public void testClose() throws Exception {
-        SasFileReader sasFileReader = new SasFileReaderImpl(is); ;
-        DataParser parser = new SASDataParser(sasFileReader , getContext(),"0" , "0");
+		SasFileReader sasFileReader = new SasFileReaderImpl(is);
+		DataParser parser = new SASDataParser(sasFileReader, getContext(), "id", "49");
+		Assert.assertEquals(49, Long.parseLong(parser.getOffset()));
+		Record record = parser.parse();
+		System.out.print(record);
+		Assert.assertNotNull(record);
+		Assert.assertEquals("zzzzzzzz", record.get().getValueAsList().get(0).getValueAsString());
+		Assert.assertEquals("id::49", record.getHeader().getSourceId());
+		Assert.assertEquals(50, Long.parseLong(parser.getOffset()));
+		record = parser.parse();
+		Assert.assertEquals(-1, Long.parseLong(parser.getOffset()));
+		record = parser.parse();
+		Assert.assertNull(record);
+	}
 
-        parser.close();
-        parser.parse();
-    }
+	@Test
+	public void testgetOffset() throws NumberFormatException, DataParserException, IOException {
+		SasFileReader sasFileReader = new SasFileReaderImpl(is);
+		;
+		DataParser parser = new SASDataParser(sasFileReader, getContext(), "0", "43");
+		Assert.assertEquals(43, Long.parseLong(parser.getOffset()));
+	}
 
-} 
+	@Test(expected = IOException.class)
+	public void testClose() throws Exception {
+		SasFileReader sasFileReader = new SasFileReaderImpl(is);
+		;
+		DataParser parser = new SASDataParser(sasFileReader, getContext(), "0", "0");
+
+		parser.close();
+		parser.parse();
+	}
+
+}

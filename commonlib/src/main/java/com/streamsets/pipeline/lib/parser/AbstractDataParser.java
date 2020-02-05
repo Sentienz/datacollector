@@ -16,12 +16,12 @@
 package com.streamsets.pipeline.lib.parser;
 
 public abstract class AbstractDataParser implements DataParser {
-  // TODO: Seems that Context would be better here?
+	// TODO: Seems that Context would be better here?
 
-  protected boolean truncated;
+	protected boolean truncated;
 
-  @Override
-  public void setTruncated() {
-    truncated = true;
-  }
+	@Override
+	public void setTruncated() {
+		truncated = true;
+	}
 }

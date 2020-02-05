@@ -20,24 +20,24 @@ import java.io.Reader;
 
 public class CompressionDataParserFactory extends DataParserFactory {
 
-  private final DataParserFactory dataParserFactory;
-  private final Settings settings;
+	private final DataParserFactory dataParserFactory;
+	private final Settings settings;
 
-  public CompressionDataParserFactory(Settings settings, DataParserFactory dataParserFactory) {
-    super(settings);
-    this.settings = settings;
-    this.dataParserFactory = dataParserFactory;
-  }
+	public CompressionDataParserFactory(Settings settings, DataParserFactory dataParserFactory) {
+		super(settings);
+		this.settings = settings;
+		this.dataParserFactory = dataParserFactory;
+	}
 
-  @Override
-  public DataParser getParser(String id, InputStream is, String offset) throws DataParserException {
-    return new CompressionDataParser(id, is, offset, settings.getCompression(), settings.getFilePatternInArchive(),
-        dataParserFactory);
-  }
+	@Override
+	public DataParser getParser(String id, InputStream is, String offset) throws DataParserException {
+		return new CompressionDataParser(id, is, offset, settings.getCompression(), settings.getFilePatternInArchive(),
+				dataParserFactory);
+	}
 
-  @Override
-  public DataParser getParser(String id, Reader reader, long offset) throws DataParserException {
-    return dataParserFactory.getParser(id, reader, offset);
-  }
+	@Override
+	public DataParser getParser(String id, Reader reader, long offset) throws DataParserException {
+		return dataParserFactory.getParser(id, reader, offset);
+	}
 
 }

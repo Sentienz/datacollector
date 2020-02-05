@@ -26,19 +26,19 @@ import java.util.Arrays;
 import java.util.List;
 
 public class LimitedMethodServer extends Server {
-  private List<String> prohibitedMethods = Arrays.asList("TRACE", "TRACK");
+	private List<String> prohibitedMethods = Arrays.asList("TRACE", "TRACK");
 
-  public LimitedMethodServer(ThreadPool threadPool) {
-    super(threadPool);
-  }
+	public LimitedMethodServer(ThreadPool threadPool) {
+		super(threadPool);
+	}
 
-  @Override
-  public void handle(HttpChannel channel) throws IOException, ServletException {
-    if(prohibitedMethods.contains(channel.getRequest().getMethod().toUpperCase())) {
-      channel.getRequest().setHandled(true);
-      channel.getResponse().setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-    } else {
-      super.handle(channel);
-    }
-  }
+	@Override
+	public void handle(HttpChannel channel) throws IOException, ServletException {
+		if (prohibitedMethods.contains(channel.getRequest().getMethod().toUpperCase())) {
+			channel.getRequest().setHandled(true);
+			channel.getResponse().setStatus(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+		} else {
+			super.handle(channel);
+		}
+	}
 }

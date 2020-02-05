@@ -13,7 +13,7 @@ import com.streamsets.pipeline.lib.parser.AbstractDataParser;
 
 public class SASXPTDataParser extends AbstractDataParser {
 
-    private final ProtoConfigurableEntity.Context context;
+  private final ProtoConfigurableEntity.Context context;
 	private SASXportFileIterator sasXportFileIterator;
 	private List<Field> headers;
 	private boolean isClosed;
@@ -22,7 +22,7 @@ public class SASXPTDataParser extends AbstractDataParser {
 	private long recordCount;
 	private boolean eof;
 	long currentOffset;
-	
+
 	public SASXPTDataParser(SASXportFileIterator sasXportFileIterator, ProtoConfigurableEntity.Context context, String id,
 			String offset) {
 		this.sasXportFileIterator = sasXportFileIterator;
@@ -32,80 +32,73 @@ public class SASXPTDataParser extends AbstractDataParser {
 		this.recordCount = sasXportFileIterator.getRowCount();
 		seekOffset();
 	}
-	
+
 	@Override
 	public Record parse() throws IOException {
-		
+
 		Record record = null;
-		
-		if(eof==true) {
+
+		if (eof == true) {
 			return null;
 		}
 		if (isClosed) {
 			throw new IOException("The parser is closed");
 		}
-		if(sasXportFileIterator.hasNext()) {
-		record = updateRecordsWithHeader(record);
-		return record;
-		}
-		else {
-			eof=true;
+		if (sasXportFileIterator.hasNext()) {
+			record = updateRecordsWithHeader(record);
+			return record;
+		} else {
+			eof = true;
 			return null;
 		}
 	}
-	
+
 	@Override
-	public String getOffset(){
-	  return eof ? String.valueOf(-1) : Long.toString(sasXportFileIterator.getOffset());
+	public String getOffset() {
+		return eof ? String.valueOf(-1) : Long.toString(sasXportFileIterator.getOffset());
 	}
-	
+
 	@Override
 	public void close() throws IOException {
 		isClosed = true;
 	}
-	
+
 	private Record updateRecordsWithHeader(Record record) throws IOException {
-		 		
-	    currentOffset = sasXportFileIterator.getOffset();
-        
-	    record = context.createRecord(id + "::" + currentOffset);
+
+		currentOffset = sasXportFileIterator.getOffset();
+
+		record = context.createRecord(id + "::" + currentOffset);
 		List<String> rows = sasXportFileIterator.next();
-		
-			if(rows==null) {
-				eof = true;
+
+		if (rows == null) {
+			eof = true;
 			return null;
-			}
-	
+		}
+
 		headers = new ArrayList<Field>();
 
 		ReadStatVariable[] columnList = sasXportFileIterator.getMetaData().variables;
-		for(ReadStatVariable col : columnList) {
+		for (ReadStatVariable col : columnList) {
 			headers.add(Field.create(col.name));
 		}
-		
+
 		LinkedHashMap<String, Field> listMap = new LinkedHashMap<>();
 		for (int i = 0; i < columnList.length; i++) {
 
 			Field header = (headers != null) ? headers.get(i) : null;
 			String key = header.getValueAsString();
-//			if (header != null) {
-//				
-//			} else {
-//				key = Integer.toString(i);
-//			}
-			listMap.put(key,Field.create(Field.Type.STRING,rows.get(i)));
-			}
-			record.set(Field.createListMap(listMap));
+			listMap.put(key, Field.create(Field.Type.STRING, rows.get(i)));
+		}
+		record.set(Field.createListMap(listMap));
 		return record;
 	}
 
-
 	private void seekOffset() {
 		int count = 1;
-	    while(count < offset) {
-	    	 List<String> rows = sasXportFileIterator.next();
-	        count++;
+		while (count < offset) {
+			List<String> rows = sasXportFileIterator.next();
+			count++;
 
-	    }	
+		}
 	}
 }

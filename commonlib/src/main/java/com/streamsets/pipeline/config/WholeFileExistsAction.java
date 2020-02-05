@@ -18,7 +18,7 @@ package com.streamsets.pipeline.config;
 import com.streamsets.pipeline.api.Label;
 
 public enum  WholeFileExistsAction implements Label{
-  TO_ERROR("Send to Error"),
+TO_ERROR("Send to Error"),
   OVERWRITE("Overwrite"),
   ;
 

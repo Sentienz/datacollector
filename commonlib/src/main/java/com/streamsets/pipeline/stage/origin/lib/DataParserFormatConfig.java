@@ -1479,51 +1479,39 @@ public class DataParserFormatConfig implements DataFormatConfig {
     DataParserFactoryBuilder builder = new DataParserFactoryBuilder(context, dataFormat.getParserFormat());
     Charset fileCharset;
 
-    switch(dataFormat) {
-    case SAS:
-    case SASXPT:
+		switch (dataFormat) {
+		case SAS:
+		case SASXPT:
 
-    	  try {
-    	    	fileCharset = Charset.forName(SAScharset);
-    	      } catch (UnsupportedCharsetException ignored) { // NOSONAR
-    	    	// setting it to a valid one so the parser factory can be configured and tested for more errors
-    			  fileCharset = StandardCharsets.UTF_8;
-    			      issues.add(
-    			          context.createConfigIssue(
-    			              stageGroup,
-    			              configPrefix + "charset",
-    			              DataFormatErrors.DATA_FORMAT_05,
-    			              SAScharset
-    			          )
-    			      );
-    			      valid = false;
-    			    }
-    break;
-    default:
-    	  try {
-    	    	fileCharset = Charset.forName(charset);
-    	      } catch (UnsupportedCharsetException ignored) { // NOSONAR
-    	    	// setting it to a valid one so the parser factory can be configured and tested for more errors
-    			  fileCharset = StandardCharsets.UTF_8;
-    			      issues.add(
-    			          context.createConfigIssue(
-    			              stageGroup,
-    			              configPrefix + "charset",
-    			              DataFormatErrors.DATA_FORMAT_05,
-    			              charset
-    			          )
-    			      );
-    			      valid = false;
-    			    }
-    }
-  
+			try {
+				fileCharset = Charset.forName(SAScharset);
+			} catch (UnsupportedCharsetException ignored) { // NOSONAR
+				// setting it to a valid one so the parser factory can be configured and tested
+				// for more errors
+				fileCharset = StandardCharsets.UTF_8;
+				issues.add(context.createConfigIssue(stageGroup, configPrefix + "charset", DataFormatErrors.DATA_FORMAT_05,
+						SAScharset));
+				valid = false;
+			}
+			break;
+		default:
+			try {
+				fileCharset = Charset.forName(charset);
+			} catch (UnsupportedCharsetException ignored) { // NOSONAR
+				// setting it to a valid one so the parser factory can be configured and tested
+				// for more errors
+				fileCharset = StandardCharsets.UTF_8;
+				issues.add(
+						context.createConfigIssue(stageGroup, configPrefix + "charset", DataFormatErrors.DATA_FORMAT_05, charset));
+				valid = false;
+			}
+		}
 
-
-    builder.setCharset(fileCharset);
-    builder.setOverRunLimit(overrunLimit);
-    builder.setRemoveCtrlChars(removeCtrlChars);
-    builder.setCompression(compression);
-    builder.setFilePatternInArchive(filePatternInArchive);
+		builder.setCharset(fileCharset);
+		builder.setOverRunLimit(overrunLimit);
+		builder.setRemoveCtrlChars(removeCtrlChars);
+		builder.setCompression(compression);
+		builder.setFilePatternInArchive(filePatternInArchive);
    
     switch (dataFormat) {
       case TEXT:
