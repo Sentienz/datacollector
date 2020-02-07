@@ -23,6 +23,7 @@ import com.streamsets.pipeline.api.ListBeanModel;
 import com.streamsets.pipeline.api.ProtoConfigurableEntity;
 import com.streamsets.pipeline.api.Stage;
 import com.streamsets.pipeline.api.ValueChooserModel;
+import com.streamsets.pipeline.api.credential.CredentialValue;
 import com.streamsets.pipeline.common.DataFormatConstants;
 import com.streamsets.pipeline.config.AvroSchemaLookupMode;
 import com.streamsets.pipeline.config.CharsetChooserValues;
@@ -52,6 +53,7 @@ import com.streamsets.pipeline.lib.el.DataUnitsEL;
 import com.streamsets.pipeline.lib.parser.DataParserFactory;
 import com.streamsets.pipeline.lib.parser.DataParserFactoryBuilder;
 import com.streamsets.pipeline.lib.parser.DataParserFormat;
+import com.streamsets.pipeline.lib.parser.excel.WorkbookParserConstants;
 import com.streamsets.pipeline.lib.parser.log.LogDataFormatValidator;
 import com.streamsets.pipeline.lib.parser.log.LogDataParserFactory;
 import com.streamsets.pipeline.lib.parser.log.RegExConfig;
@@ -77,6 +79,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.charset.UnsupportedCharsetException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -767,6 +770,19 @@ public class DataParserFormatConfig implements DataFormatConfig {
   public List<String> schemaRegistryUrls = new ArrayList<>();
 
   @ConfigDef(
+      required = false,
+      type = ConfigDef.Type.CREDENTIAL,
+      label = "Basic Auth User Info",
+      dependencies = {
+          @Dependency(configName = "dataFormat^", triggeredByValues = "AVRO"),
+          @Dependency(configName = "avroSchemaSource", triggeredByValues = "REGISTRY")
+      },
+      displayPosition = 421,
+      group = "DATA_FORMAT"
+  )
+  public CredentialValue basicAuth = () -> "";
+
+  @ConfigDef(
       required = true,
       type = ConfigDef.Type.MODEL,
       label = "Lookup Schema By",
@@ -808,6 +824,22 @@ public class DataParserFormatConfig implements DataFormatConfig {
       group = "DATA_FORMAT"
   )
   public int schemaId;
+
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.BOOLEAN,
+      label = "Skip Union Indexes",
+      defaultValue = "false",
+      description = "When checked generated records will not contain header attributes identifying which part of a" +
+        " union was used to read data in. Data Collector does not use the header attributes directly, thus this can" +
+        " be selected safely unless the pipeline explicitly depends on them.",
+      dependencies = {
+          @Dependency(configName = "dataFormat^", triggeredByValues = "AVRO")
+      },
+      displayPosition = 460,
+      group = "DATA_FORMAT"
+  )
+  public boolean avroSkipUnionIndex = false;
 
   // PROTOBUF
 
@@ -1076,6 +1108,45 @@ public class DataParserFormatConfig implements DataFormatConfig {
   )
   @ValueChooserModel(ExcelHeaderChooserValues.class)
   public ExcelHeader excelHeader;
+
+  @ConfigDef(
+    required = true,
+    type = ConfigDef.Type.BOOLEAN,
+    defaultValue = "false",
+    label = "Skip Cells With No Header",
+    description = "If checked, cells that have no associated header value will be skipped.",
+    displayPosition = 1001,
+    group = "DATA_FORMAT",
+    dependsOn = "excelHeader",
+    triggeredByValue = "WITH_HEADER"
+  )
+  public boolean excelSkipCellsWithNoHeader = false;
+
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.BOOLEAN,
+      defaultValue = "true",
+      label = "Read All Sheets",
+      description = "Specifies whether all sheets from the document should be read.",
+      displayPosition = 1010,
+      group = "DATA_FORMAT",
+      dependsOn = "dataFormat^",
+      triggeredByValue = "EXCEL"
+  )
+  public boolean excelReadAllSheets = true;
+
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.LIST,
+      label = "Import Sheets",
+      defaultValue = "[]",
+      description = "Names of the sheets that should be imported. Other sheets will be ignored.",
+      displayPosition = 1020,
+      group = "DATA_FORMAT",
+      dependsOn = "excelReadAllSheets",
+      triggeredByValue = "false"
+  )
+  public List<String> excelSheetNames = Collections.emptyList();
 
   // Size of StringBuilder pool maintained by Text and Log Data Parser Factories.
   // The default value is 1 for regular origins. Multithreaded origins should override this value as required.
@@ -1557,7 +1628,9 @@ public class DataParserFormatConfig implements DataFormatConfig {
         .setMaxDataLen(-1)
         .setConfig(SCHEMA_KEY, avroSchema)
         .setConfig(SCHEMA_SOURCE_KEY, avroSchemaSource)
-        .setConfig(SCHEMA_REPO_URLS_KEY, schemaRegistryUrls);
+        .setConfig(SCHEMA_REPO_URLS_KEY, schemaRegistryUrls)
+        .setConfig(SCHEMA_SKIP_AVRO_INDEXES, avroSkipUnionIndex)
+        .setConfig(BASIC_AUTH_USER_INFO, basicAuth.get());
     if (schemaLookupMode == AvroSchemaLookupMode.SUBJECT) {
       // Subject used for looking up schema
       builder.setConfig(SUBJECT_KEY, subject);
@@ -1646,6 +1719,8 @@ public class DataParserFormatConfig implements DataFormatConfig {
 
   private void buildWorkbookParser(DataParserFactoryBuilder builder) {
     builder
+        .setConfig(WorkbookParserConstants.SHEETS, excelReadAllSheets ? Collections.emptyList() : excelSheetNames)
+        .setConfig(WorkbookParserConstants.SKIP_CELLS_WITH_NO_HEADER, excelSkipCellsWithNoHeader)
         .setMode(excelHeader)
         .setMaxDataLen(-1);
   }

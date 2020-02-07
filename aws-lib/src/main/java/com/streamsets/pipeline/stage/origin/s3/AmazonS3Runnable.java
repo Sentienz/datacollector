@@ -17,10 +17,7 @@ package com.streamsets.pipeline.stage.origin.s3;
 
 import com.amazonaws.AbortedException;
 import com.amazonaws.AmazonClientException;
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.google.common.base.Throwables;
@@ -42,13 +39,10 @@ import com.streamsets.pipeline.api.service.dataformats.DataFormatParserService;
 import com.streamsets.pipeline.api.service.dataformats.DataParser;
 import com.streamsets.pipeline.api.service.dataformats.DataParserException;
 import com.streamsets.pipeline.api.service.dataformats.RecoverableDataParserException;
-import com.streamsets.pipeline.lib.aws.AwsRegion;
 import com.streamsets.pipeline.lib.hashing.HashingUtil;
 import com.streamsets.pipeline.stage.common.DefaultErrorRecordHandler;
 import com.streamsets.pipeline.stage.common.ErrorRecordHandler;
 import com.streamsets.pipeline.stage.common.HeaderAttributeConstants;
-import com.streamsets.pipeline.stage.lib.aws.AWSConfig;
-import com.streamsets.pipeline.stage.lib.aws.AWSUtil;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,7 +96,7 @@ public class AmazonS3Runnable implements Runnable {
     String oldThreadName = Thread.currentThread().getName();
     Thread.currentThread().setName(S3Constants.AMAZON_S3_THREAD_PREFIX + runnerId);
     try {
-      s3Client = createConnection();
+      s3Client = s3ConfigBean.s3Config.getS3Client();
       initGaugeIfNeeded();
       S3Offset offset;
       while (!context.isStopped()) {
@@ -123,14 +117,13 @@ public class AmazonS3Runnable implements Runnable {
           }
           // we set the offset to -1 to indicate we are done with the current object and we should fetch a new one
           // from the spooler
-          offset.setOffset(S3Constants.MINUS_ONE);
+          amazonS3Source.updateOffset(runnerId, new S3Offset(offset, S3Constants.MINUS_ONE));
         }
       }
     } catch (StageException e) {
       handleStageError(e.getErrorCode(), e);
     } finally {
       Thread.currentThread().setName(oldThreadName);
-      s3Client.shutdown();
       IOUtils.closeQuietly(parser);
     }
   }
@@ -150,6 +143,9 @@ public class AmazonS3Runnable implements Runnable {
       updateGauge(Status.SPOOLING, null);
       offset = fetchNextObjectFromSpooler(offset, batchContext);
       LOG.debug("Object '{}' with offset '{}' fetched from Spooler", offset.getKey(), offset.getOffset());
+      if (getCurrentObject() != null) {
+        amazonS3Source.sendNewFileEvent(offset.getKey(), batchContext);
+      }
     } else {
       //check if the current object was modified between batches
       LOG.debug("Checking if Object '{}' has been modified between batches", getCurrentObject().getKey());
@@ -235,8 +231,9 @@ public class AmazonS3Runnable implements Runnable {
               setHeaders(record, object);
               batchMaker.addRecord(record);
               amazonS3Source.incrementNoMoreDataRecordCount();
+              amazonS3Source.incrementFileFinishedRecordCounter(offset.getKey());
               i++;
-              offset.setOffset(parser.getOffset());
+              offset = new S3Offset(offset, parser.getOffset());
             } else {
               parser.close();
               parser = null;
@@ -245,13 +242,15 @@ public class AmazonS3Runnable implements Runnable {
                 object = null;
               }
               amazonS3Source.incrementNoMoreDataFileCount();
-              offset.setOffset(S3Constants.MINUS_ONE);
+              offset = new S3Offset(offset, S3Constants.MINUS_ONE);
+              amazonS3Source.sendFileFinishedEvent(offset.getKey(), batchContext);
               break;
             }
           } catch (ObjectLengthException ex) {
             errorRecordHandler.onError(Errors.S3_SPOOLDIR_02, s3Object.getKey(), offset.toString(), ex);
             amazonS3Source.incrementNoMoreDataErrorCount();
-            offset.setOffset(S3Constants.MINUS_ONE);
+            amazonS3Source.incrementFileFinishedErrorCounter(offset.getKey());
+            offset = new S3Offset(offset, S3Constants.MINUS_ONE);
           }
         }
       } catch (AmazonClientException e) {
@@ -259,7 +258,7 @@ public class AmazonS3Runnable implements Runnable {
         throw new StageException(Errors.S3_SPOOLDIR_25, e.toString(), e);
       } catch (IOException | DataParserException ex) {
         if (!(ex.getCause() instanceof AbortedException)) {
-          offset.setOffset(S3Constants.MINUS_ONE);
+          offset = new S3Offset(offset, S3Constants.MINUS_ONE);
           String exOffset;
           if (ex instanceof OverrunException) {
             exOffset = String.valueOf(((OverrunException) ex).getStreamOffset());
@@ -271,7 +270,7 @@ public class AmazonS3Runnable implements Runnable {
               exOffset = S3Constants.MINUS_ONE;
             }
           }
-          offset.setOffset(exOffset);
+          offset = new S3Offset(offset, exOffset);
 
           switch (context.getOnErrorRecord()) {
             case DISCARD:
@@ -459,8 +458,9 @@ public class AmazonS3Runnable implements Runnable {
         return nextAvailObj == null || s3Offset == null || nextAvailObj.getLastModified().getTime() >= Long.parseLong(
             s3Offset.getTimestamp());
       case LEXICOGRAPHICAL:
-        return nextAvailObj == null || s3Offset == null || s3Offset.getKey() == null || s3Offset.getKey().equals(
-            S3Constants.EMPTY) || nextAvailObj.getKey().compareTo(s3Offset.getKey()) > 0;
+        return nextAvailObj == null || s3Offset == null || s3Offset.getKey() == null
+            || s3Offset.getKey().equals(S3Constants.EMPTY) || nextAvailObj.getKey().compareTo(s3Offset.getKey()) > 0
+            || (nextAvailObj.getKey().compareTo(s3Offset.getKey()) == 0 && AmazonS3Util.parseOffset(s3Offset) != -1);
       default:
         throw new IllegalArgumentException("Unknown ordering: " + objectOrdering.getLabel());
     }
@@ -532,27 +532,5 @@ public class AmazonS3Runnable implements Runnable {
       //Way to throw stage exception from runnable to main source thread
       Throwables.propagate(se);
     }
-  }
-
-  private AmazonS3 createConnection() throws StageException {
-    AwsRegion region = s3ConfigBean.s3Config.region;
-    AWSConfig awsConfig = s3ConfigBean.s3Config.awsConfig;
-    int maxErrorRetries = s3ConfigBean.s3Config.getMaxErrorRetries();
-
-    AWSCredentialsProvider credentials = AWSUtil.getCredentialsProvider(awsConfig);
-    ClientConfiguration clientConfig = AWSUtil.getClientConfiguration(s3ConfigBean.proxyConfig);
-
-    if (maxErrorRetries >= 0) {
-      clientConfig.setMaxErrorRetry(maxErrorRetries);
-    }
-
-    AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard()
-                                                         .withCredentials(credentials)
-                                                         .withClientConfiguration(clientConfig)
-                                                         .withChunkedEncodingDisabled(awsConfig.disableChunkedEncoding)
-                                                         .withPathStyleAccessEnabled(true);
-
-    builder.withRegion(region.getId());
-    return builder.build();
   }
 }

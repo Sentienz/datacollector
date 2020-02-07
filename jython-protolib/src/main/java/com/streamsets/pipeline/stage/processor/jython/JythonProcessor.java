@@ -19,9 +19,9 @@ import com.streamsets.pipeline.api.Field;
 import com.streamsets.pipeline.api.Stage;
 import com.streamsets.pipeline.stage.processor.scripting.AbstractScriptingProcessor;
 import com.streamsets.pipeline.stage.processor.scripting.ProcessingMode;
-import com.streamsets.pipeline.stage.processor.scripting.ScriptObjectFactory;
-import com.streamsets.pipeline.stage.processor.scripting.ScriptTypedNullObject;
-import com.streamsets.pipeline.stage.processor.scripting.config.ScriptRecordType;
+import com.streamsets.pipeline.stage.util.scripting.ScriptObjectFactory;
+import com.streamsets.pipeline.stage.util.scripting.ScriptTypedNullObject;
+import com.streamsets.pipeline.stage.util.scripting.config.ScriptRecordType;
 import org.python.core.PyDictionary;
 import org.python.core.PyList;
 import org.slf4j.Logger;
@@ -32,6 +32,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,14 +45,16 @@ public class JythonProcessor extends AbstractScriptingProcessor {
   public static final String JYTHON_ENGINE = "jython";
   private final ScriptRecordType scriptRecordType;
 
-  public JythonProcessor(ProcessingMode processingMode, String script, String initScript, String destroyScript, ScriptRecordType scriptRecordType) {
-    super(LOG, JYTHON_ENGINE, Groups.JYTHON.name(), processingMode, script, initScript, destroyScript);
+
+  public JythonProcessor(ProcessingMode processingMode, String script, String initScript, String destroyScript,
+                         ScriptRecordType scriptRecordType, Map<String, String> userParams) {
+    super(LOG, JYTHON_ENGINE, Groups.JYTHON.name(), processingMode, script, initScript, destroyScript, userParams);
     this.scriptRecordType = scriptRecordType;
   }
 
   // For tests
   public JythonProcessor(ProcessingMode processingMode, String script) {
-    this(processingMode, script, "", "", ScriptRecordType.NATIVE_OBJECTS);
+    this(processingMode, script, "", "", ScriptRecordType.NATIVE_OBJECTS, new HashMap<>());
   }
 
   @Override

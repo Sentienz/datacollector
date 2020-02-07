@@ -138,7 +138,7 @@ public enum ContainerError implements ErrorCode {
   CONTAINER_0792("Pipeline lifecycle event stage generated error record: {}"),
 
   //Runner
-  CONTAINER_0800("Pipeline '{}' validation error : {}"),
+  CONTAINER_0800("Can't start pipeline due {} validation error(s). First one: {}"),
   CONTAINER_0801("Thread unexpectedly interrupted"),
   CONTAINER_0802("Detected run away pipeline runners (only {} out of {} runners have finished)"),
   CONTAINER_0803("Trying to acquire pipeline runner after the pool was destroyed."),
@@ -149,6 +149,7 @@ public enum ContainerError implements ErrorCode {
   CONTAINER_0902("Definition requires at least version {} which is higher then available library supports ({})"),
   CONTAINER_0903("Could not find service definition for '{}'"),
   CONTAINER_0904("Service Upgrader can't register another service."),
+  CONTAINER_0905("Stage library {} is a legacy library and must be installed separately"),
 
   //Email Notifier
   CONTAINER_01000("Error loading email template, reason : {}"),

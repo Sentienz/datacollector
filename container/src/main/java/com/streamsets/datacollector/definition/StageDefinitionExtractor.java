@@ -49,7 +49,7 @@ import com.streamsets.pipeline.api.impl.ErrorMessage;
 import com.streamsets.pipeline.api.impl.Utils;
 import com.streamsets.pipeline.api.service.ServiceConfiguration;
 import com.streamsets.pipeline.api.service.ServiceDependency;
-import com.streamsets.pipeline.upgrader.YamlStageUpgraderLoader;
+import com.streamsets.pipeline.upgrader.SelectorStageUpgrader;
 import org.apache.commons.lang3.ClassUtils;
 
 import java.util.ArrayList;
@@ -280,11 +280,15 @@ public abstract class StageDefinitionExtractor {
           if (sDef.upgraderDef().isEmpty()) {
             upgrader = sDef.upgrader().newInstance();
           } else {
-            upgrader = new YamlStageUpgraderLoader(name, sDef.upgraderDef()).get();
+            upgrader = new SelectorStageUpgrader(
+                name,
+                sDef.upgrader().newInstance(),
+                klass.getClassLoader().getResource(sDef.upgraderDef())
+            );
           }
         } catch (Exception ex) {
           throw new IllegalArgumentException(Utils.format(
-              "Could not instantiate StageUpgrader for StageDefinition '{}': {}", name, ex.toString(), ex));
+              "Could not instantiate StageUpgrader for StageDefinition '{}': {}", name, ex.toString()), ex);
         }
 
         boolean resetOffset = sDef.resetOffset();
@@ -297,6 +301,10 @@ public abstract class StageDefinitionExtractor {
         boolean producesEvents = sDef.producesEvents();
 
         List<Class> eventDefs = ImmutableList.copyOf(sDef.eventDefs());
+
+        String yamlUpgrader = sDef.upgraderDef();
+
+        List<String> tags = ImmutableList.copyOf(sDef.tags());
 
         return new StageDefinition(
             sDef,
@@ -335,7 +343,9 @@ public abstract class StageDefinitionExtractor {
             inputStreams,
             inputStreamLabelProviderClass,
             bisectable,
-            eventDefs
+            eventDefs,
+            yamlUpgrader,
+            tags
         );
       } catch (Exception e) {
         throw new IllegalStateException("Exception while extracting stage definition for " + getStageName(klass), e);

@@ -51,6 +51,17 @@ public class JdbcQueryExecutorConfig {
   public String query;
 
   @ConfigDef(
+    required = false,
+    type = ConfigDef.Type.BOOLEAN,
+    label = "Include Query Result Count in Events",
+    description = "The number of results returned/affected by the query when produce events is enabled",
+    defaultValue = "false",
+    displayPosition = 40,
+    group = "JDBC"
+  )
+  public boolean queryResultCount = false;
+
+  @ConfigDef(
       required = true,
       type = ConfigDef.Type.BOOLEAN,
       label = "Batch Commit",
@@ -60,6 +71,20 @@ public class JdbcQueryExecutorConfig {
       group = "ADVANCED"
   )
   public boolean batchCommit = true;
+
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.BOOLEAN,
+      label = "Enable Parallel Queries",
+      description = "Execute multiple queries simultaneously.  Within a batch, " +
+          "there can be up to three phases. " +
+          "Records are reordered so that all inserts are processed first, " +
+          "all updates are processed second (in original order), all deletes are processed last.",
+
+      displayPosition = 25,
+      group = "ADVANCED"
+  )
+  public boolean parallel = false;
 
   private HikariDataSource dataSource = null;
 

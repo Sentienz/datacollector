@@ -412,7 +412,8 @@ angular
 
                   stageOutputs = [{
                     instanceName: $scope.stageInstances[0].instanceName,
-                    output: {}
+                    output: {},
+                    eventRecords: []
                   }];
 
                   stageOutputs[0].output[$scope.stageInstances[0].outputLanes[0]] =
@@ -611,7 +612,13 @@ angular
             if (previewData.issues) {
               $rootScope.common.errors = [previewData.issues];
             } else if (previewData.message) {
-              $rootScope.common.errors = [previewData.message];
+              $rootScope.common.errors = [{
+                RemoteException: {
+                  antennaDoctorMessages: previewData.antennaDoctorMessages,
+                  localizedMessage: previewData.message,
+                  stackTrace: previewData.errorStackTrace
+                }
+              }];
             }
 
             $scope.closePreview();

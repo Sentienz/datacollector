@@ -21,7 +21,6 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.streamsets.datacollector.alerts.AlertEventListener;
 import com.streamsets.datacollector.alerts.AlertsUtil;
 import com.streamsets.datacollector.config.MetricElement;
 import com.streamsets.datacollector.config.MetricType;
@@ -65,8 +64,12 @@ public class TestMetricRuleEvaluator {
     metrics = new MetricRegistry();
     variables = new ELVariables();
     elEvaluator = new ELEvaluator("TestMetricRuleEvaluator", ConcreteELDefinitionExtractor.get(), RecordEL.class, StringEL.class);
-    runtimeInfo = new StandaloneRuntimeInfo(RuntimeModule.SDC_PROPERTY_PREFIX, new MetricRegistry(),
-      Arrays.asList(TestDataRuleEvaluator.class.getClassLoader()));
+    runtimeInfo = new StandaloneRuntimeInfo(
+        RuntimeInfo.SDC_PRODUCT,
+        RuntimeModule.SDC_PROPERTY_PREFIX,
+        new MetricRegistry(),
+        Arrays.asList(TestDataRuleEvaluator.class.getClassLoader())
+    );
   }
 
   @Test

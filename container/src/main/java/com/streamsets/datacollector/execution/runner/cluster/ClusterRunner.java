@@ -56,7 +56,6 @@ import com.streamsets.datacollector.execution.runner.common.ProductionPipeline;
 import com.streamsets.datacollector.execution.runner.common.ProductionPipelineBuilder;
 import com.streamsets.datacollector.execution.runner.common.ProductionPipelineRunner;
 import com.streamsets.datacollector.execution.runner.common.SampledRecord;
-import com.streamsets.datacollector.event.dto.PipelineStartEvent;
 import com.streamsets.datacollector.json.ObjectMapperFactory;
 import com.streamsets.datacollector.lineage.LineagePublisherTask;
 import com.streamsets.datacollector.main.RuntimeInfo;
@@ -73,7 +72,6 @@ import com.streamsets.datacollector.store.AclStoreTask;
 import com.streamsets.datacollector.store.PipelineInfo;
 import com.streamsets.datacollector.store.PipelineStoreException;
 import com.streamsets.datacollector.store.PipelineStoreTask;
-import com.streamsets.datacollector.updatechecker.UpdateChecker;
 import com.streamsets.datacollector.usagestats.StatsCollector;
 import com.streamsets.datacollector.util.Configuration;
 import com.streamsets.datacollector.util.ContainerError;
@@ -148,7 +146,6 @@ public class ClusterRunner extends AbstractRunner {
   private ScheduledFuture<?> metricRunnableFuture;
   private volatile boolean isClosed;
   private ScheduledFuture<?> updateCheckerFuture;
-  private UpdateChecker updateChecker;
   private MetricsEventRunnable metricsEventRunnable;
   private PipelineConfiguration pipelineConf;
   private int maxRetries;
@@ -508,28 +505,27 @@ public class ClusterRunner extends AbstractRunner {
         JobEL.setConstantsInContext(pipelineConfigBean.constants);
       }
 
+      // Find a list of BlobStore resource to ship to a cluster job
       InterceptorCreatorContextBuilder contextBuilder = new InterceptorCreatorContextBuilder(blobStoreTask, getConfiguration(), context.getInterceptorConfigurations());
       ClusterSourceInfo sourceInfo = getClusterSourceInfo(context, getName(), getRev(), pipelineConf);
-      // Find a list of BlobStore resource to ship to a cluster job
       List<BlobStoreDef> listOfResources = new ArrayList<>();
       ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-      for(PipelineStartEvent.InterceptorConfiguration conf : context.getInterceptorConfigurations()) {
-        for (InterceptorDefinition def : getStageLibrary().getInterceptorDefinitions()) {
-          String className = def.getKlass().getName();
-          String stageLib = def.getLibraryDefinition().getName();
-          if (conf.getStageLibrary().equals(stageLib) && conf.getInterceptorClassName().equals(className)) {
-            try {
-              Thread.currentThread().setContextClassLoader(def.getStageClassLoader());
-              InterceptorCreator creator = def.getDefaultCreator().newInstance();
-              listOfResources.addAll(creator.blobStoreResource(conf.getParameters()));
-            } catch (IllegalAccessException | InstantiationException ex) {
-              throw new RuntimeException("Error while getting BlobStore resource from Interceptor ", ex);
-            } finally {
-              Thread.currentThread().setContextClassLoader(classLoader);
-            }
-          }
+      // Give chance for each registered interceptor to push whatever it needs to the cluster
+      for (InterceptorDefinition def : getStageLibrary().getInterceptorDefinitions()) {
+        String className = def.getKlass().getName();
+        String stageLib = def.getLibraryDefinition().getName();
+
+        try {
+          Thread.currentThread().setContextClassLoader(def.getStageClassLoader());
+          InterceptorCreator creator = def.getDefaultCreator().newInstance();
+          listOfResources.addAll(creator.blobStoreResource(contextBuilder.buildBaseContext(stageLib, className)));
+        } catch (IllegalAccessException | InstantiationException ex) {
+          throw new RuntimeException("Error while getting BlobStore resource from Interceptor ", ex);
+        } finally {
+          Thread.currentThread().setContextClassLoader(classLoader);
         }
       }
+
       List<String> files = null;
       if (!listOfResources.isEmpty()) {
         files = new ArrayList<>();
@@ -747,7 +743,7 @@ public class ClusterRunner extends AbstractRunner {
       List<Issue> issues = pipeline.init(false);
       if (!issues.isEmpty()) {
         PipelineRuntimeException e =
-          new PipelineRuntimeException(ContainerError.CONTAINER_0800, name, issues.get(0).getMessage());
+          new PipelineRuntimeException(ContainerError.CONTAINER_0800, issues.size(), issues.get(0).getMessage());
         Map<String, Object> attributes = new HashMap<>();
         attributes.putAll(getAttributes());
         attributes.put("issues", new IssuesJson(new Issues(issues)));
@@ -1058,8 +1054,6 @@ public class ClusterRunner extends AbstractRunner {
   }
 
   private void scheduleRunnable(String user, PipelineConfiguration pipelineConf, PipelineConfigBean pipelineConfigBean) {
-    updateChecker = new UpdateChecker(getRuntimeInfo(), getConfiguration(), pipelineConf, this);
-    updateCheckerFuture = runnerExecutor.scheduleAtFixedRate(updateChecker, 1, 24 * 60, TimeUnit.MINUTES);
     if(metricsEventRunnable != null) {
       metricRunnableFuture =
         runnerExecutor.scheduleAtFixedRate(metricsEventRunnable, 0, metricsEventRunnable.getScheduledDelay(),
@@ -1080,9 +1074,6 @@ public class ClusterRunner extends AbstractRunner {
     }
     if (managerRunnableFuture != null) {
       managerRunnableFuture.cancel(false);
-    }
-    if (updateCheckerFuture != null) {
-      updateCheckerFuture.cancel(true);
     }
   }
 
@@ -1112,11 +1103,6 @@ public class ClusterRunner extends AbstractRunner {
       ApplicationState appState = new ApplicationState((Map) getState().getAttributes().get(APPLICATION_STATE));
       postTerminate(user, appState, pipelineConf, pipelineConfigBean, PipelineStatus.STOPPED, "Stopped cluster pipeline");
     }
-  }
-
-  @Override
-  public Map getUpdateInfo() {
-    return updateChecker.getUpdateInfo();
   }
 
   RuleDefinitions getRules() throws PipelineException {

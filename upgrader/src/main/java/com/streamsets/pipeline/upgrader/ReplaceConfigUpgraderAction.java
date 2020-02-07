@@ -18,6 +18,7 @@ package com.streamsets.pipeline.upgrader;
 import com.streamsets.pipeline.api.StageException;
 import com.streamsets.pipeline.api.impl.Utils;
 
+import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
@@ -27,7 +28,7 @@ public class ReplaceConfigUpgraderAction<T> extends UpgraderAction<ReplaceConfig
 
   public static final String DEFAULT_TOKEN = "$$";
 
-  private String ifOldValueMatches = MATCHES_ALL;
+  private Object ifOldValueMatches = MATCHES_ALL;
   private String tokenForOldValue = DEFAULT_TOKEN;
   private Object newValue;
   private Object elseNewValue;
@@ -36,11 +37,11 @@ public class ReplaceConfigUpgraderAction<T> extends UpgraderAction<ReplaceConfig
     super(wrapper);
   }
 
-  public String getIfOldValueMatches() {
+  public Object getIfOldValueMatches() {
     return ifOldValueMatches;
   }
 
-  public ReplaceConfigUpgraderAction setIfOldValueMatches(String ifOldValueMatches) {
+  public ReplaceConfigUpgraderAction setIfOldValueMatches(Object ifOldValueMatches) {
     if (ifOldValueMatches != null) {
       this.ifOldValueMatches = ifOldValueMatches;
     }
@@ -76,7 +77,7 @@ public class ReplaceConfigUpgraderAction<T> extends UpgraderAction<ReplaceConfig
     return this;
   }
 
-  protected Object getNewValue(Object oldValue, Object newValue) {
+  protected Object getNewValue(Map<String, Object> originalConfigs, Object oldValue, Object newValue) {
     Object value = newValue;
     if (newValue instanceof String) {
       String newValueStr = (String) newValue;
@@ -87,31 +88,32 @@ public class ReplaceConfigUpgraderAction<T> extends UpgraderAction<ReplaceConfig
           throw new StageException(Errors.YAML_UPGRADER_05, getName());
         }
       }
+      value = resolveValueIfEL(originalConfigs, value);
     }
     return value;
   }
 
   @Override
-  public void upgrade(T configs) {
+  public void upgrade(Map<String, Object> originalConfigs, T configs) {
     Utils.checkNotNull(getName(), "name");
     Utils.checkNotNull(getNewValue(), "newValue");
     ConfigsAdapter configsAdapter = wrap(configs);
     ConfigsAdapter.Pair config = configsAdapter.find(getName());
     if (config != null) {
       if (MATCHES_ALL.equals(getIfOldValueMatches())) {
-        configsAdapter.set(getName(), getNewValue(config.getValue(), getNewValue()));
+        configsAdapter.set(getName(), getNewValue(originalConfigs, config.getValue(), getNewValue()));
       } else {
         boolean matches;
         if ((config.getValue() instanceof String)) {
-          Pattern pattern = Pattern.compile(getIfOldValueMatches());
+          Pattern pattern = Pattern.compile(getIfOldValueMatches().toString());
           matches = pattern.matcher(config.getValue().toString()).matches();
         } else {
-          matches = config.getValue().toString().equals(getIfOldValueMatches());
+          matches = config.getValue().equals(getIfOldValueMatches());
         }
         if (matches) {
-          configsAdapter.set(getName(), getNewValue(config.getValue(), getNewValue()));
+          configsAdapter.set(getName(), getNewValue(originalConfigs, config.getValue(), getNewValue()));
         } else if (getElseNewValue() != null) {
-          configsAdapter.set(getName(), getNewValue(config.getValue(), getElseNewValue()));
+          configsAdapter.set(getName(), getNewValue(originalConfigs, config.getValue(), getElseNewValue()));
         }
       }
     }

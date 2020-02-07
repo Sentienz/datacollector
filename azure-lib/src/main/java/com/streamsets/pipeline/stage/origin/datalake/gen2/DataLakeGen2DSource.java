@@ -35,8 +35,8 @@ import com.streamsets.pipeline.lib.dirspooler.SpoolDirConfigBean;
     recordsByRef = true,
     resetOffset = true,
     producesEvents = true,
-    onlineHelpRefUrl ="index.html?contextID=task_sh1_d45_rhb",
-    beta = true
+    upgraderDef = "upgrader/DataLakeGen2DSource.yaml",
+    onlineHelpRefUrl ="index.html?contextID=task_sh1_d45_rhb"
 )
 @ConfigGroups(DataLakeGen2SourceGroups.class)
 @HideConfigs(value = {
@@ -44,7 +44,15 @@ import com.streamsets.pipeline.lib.dirspooler.SpoolDirConfigBean;
     "dataLakeGen2SourceConfigBean.hdfsUser",
     "dataLakeGen2SourceConfigBean.hdfsKerberos",
     "dataLakeGen2SourceConfigBean.hdfsConfDir",
-    "dataLakeGen2SourceConfigBean.hdfsConfigs"
+    "dataLakeGen2SourceConfigBean.hdfsConfigs",
+    "conf.allowLateDirectory",
+    "conf.dataFormatConfig.verifyChecksum",
+    "conf.dataFormatConfig.avroSchemaSource",
+    "conf.dataFormatConfig.avroSchema",
+    "conf.dataFormatConfig.schemaRegistryUrls",
+    "conf.dataFormatConfig.schemaLookupMode",
+    "conf.dataFormatConfig.subject",
+    "conf.dataFormatConfig.schemaId"
 })
 @GenerateResourceBundle
 public class DataLakeGen2DSource extends DPushSource {

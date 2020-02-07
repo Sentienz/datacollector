@@ -20,11 +20,14 @@ import com.streamsets.pipeline.api.BatchContext;
 import com.streamsets.pipeline.api.PushSource;
 import com.streamsets.pipeline.api.Source;
 import com.streamsets.pipeline.api.StageException;
+import com.streamsets.pipeline.lib.event.FinishedFileEvent;
+import com.streamsets.pipeline.lib.event.NewFileEvent;
 import com.streamsets.pipeline.lib.event.NoMoreDataEvent;
-import org.json.JSONObject;
+import com.streamsets.pipeline.lib.util.AntPathMatcher;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -34,13 +37,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class AmazonS3SourceImpl extends AbstractAmazonS3Source implements AmazonS3Source {
-  volatile Map<Integer, S3Offset> offsetsMap;
+  private volatile Map<Integer, S3Offset> offsetsMap;
   volatile Queue<S3Offset> orphanThreads;
   private AtomicBoolean noMoreDataEventSent;
 
   private AtomicLong noMoreDataRecordCount;
   private AtomicLong noMoreDataErrorCount;
   private AtomicLong noMoreDataFileCount;
+  private Map<String, Long> fileFinishedRecordCount;
+  private Map<String, Long> fileFinishedErrorCount;
 
   private PushSource.Context context;
 
@@ -52,10 +57,12 @@ public class AmazonS3SourceImpl extends AbstractAmazonS3Source implements Amazon
     noMoreDataRecordCount = new AtomicLong();
     noMoreDataErrorCount = new AtomicLong();
     noMoreDataFileCount = new AtomicLong();
+    fileFinishedRecordCount = new HashMap<>();
+    fileFinishedErrorCount = new HashMap<>();
   }
 
   @Override
-  public Map<Integer, S3Offset> handleOffset(Map<String, String> lastSourceOffset, PushSource.Context context)
+  public void handleOffset(Map<String, String> lastSourceOffset, PushSource.Context context)
       throws StageException {
     this.context = context;
     int threadCount = 0;
@@ -68,14 +75,18 @@ public class AmazonS3SourceImpl extends AbstractAmazonS3Source implements Amazon
     } else {
       createInitialOffsetsMap(lastSourceOffset);
     }
-    return offsetsMap;
   }
 
   @VisibleForTesting
   void createInitialOffsetsMap(Map<String, String> lastSourceOffset) throws StageException {
     List<S3Offset> unorderedListOfOffsets = new ArrayList<>();
+    AntPathMatcher pathMatcher = new AntPathMatcher(s3ConfigBean.s3Config.delimiter);
+    String prefixPattern = s3ConfigBean.s3Config.commonPrefix + s3ConfigBean.s3FileConfig.prefixPattern;
     for (String offset : lastSourceOffset.values()) {
-      unorderedListOfOffsets.add(S3Offset.fromString(offset));
+      S3Offset s3Offset = S3Offset.fromString(offset);
+      if (pathMatcher.match(prefixPattern, s3Offset.getKey())) {
+        unorderedListOfOffsets.add(s3Offset);
+      }
     }
 
     List<S3Offset> orderedListOfOffsets = orderOffsets(unorderedListOfOffsets);
@@ -116,63 +127,28 @@ public class AmazonS3SourceImpl extends AbstractAmazonS3Source implements Amazon
     if (s3Offset.getKey() != null) {
 
       if (!isKeyAlreadyInMap(s3Offset.getKey())) {
-        offsetsMap.put(runnerId, s3Offset);
+        offsetsMap.put(runnerId, new S3Offset(s3Offset));
         context.commitOffset(String.valueOf(runnerId), s3Offset.toString());
         return;
       }
 
       S3Offset offset = getOffsetFromGivenKey(s3Offset.getKey());
 
-      int offsetVal;
-      int s3offsetVal;
-      if (offset != null && offset.getOffset().contains(S3Offset.OFFSET_SEPARATOR)) {
-        //Then is an EXCEL offset
-        offsetVal = Integer.valueOf(offset.getOffset().split(S3Offset.OFFSET_SEPARATOR)[1]);
-        s3offsetVal = Integer.valueOf(s3Offset.getOffset().split(S3Offset.OFFSET_SEPARATOR)[1]);
-      } else if (isJSONOffset(s3Offset)) {
-        //If case of zipped files, if the filename is the same, we handle it as before, if not we will use the new
-        // offset for the new file
-        if (isJSONOffset(offset)) {
-          offsetVal = getFileName(offset.getOffset()).equals(getFileName(s3Offset.getOffset()))
-                      ? getFileOffset(offset.getOffset())
-                      : 0;
-        } else {
-          offsetVal = Integer.valueOf(offset.getOffset());
-        }
-        s3offsetVal = getFileOffset(s3Offset.getOffset());
-      } else {
-        offsetVal = Integer.valueOf(offset.getOffset());
-        s3offsetVal = Integer.valueOf(s3Offset.getOffset());
-      }
+      long offsetVal = AmazonS3Util.parseOffset(offset);
+      long s3offsetVal = AmazonS3Util.parseOffset(s3Offset);
+
       if (!offset.getOffset().equals(S3Constants.MINUS_ONE) &&
           (s3Offset.getOffset().equals(S3Constants.MINUS_ONE) || s3offsetVal > offsetVal)) {
-        offsetsMap.put(runnerId, s3Offset);
+        offsetsMap.put(runnerId, new S3Offset(s3Offset));
         context.commitOffset(String.valueOf(runnerId), s3Offset.toString());
       }
     }
   }
 
-  @VisibleForTesting
-  static boolean isJSONOffset(S3Offset s3Offset) {
-    return s3Offset.getOffset().contains("fileName") && s3Offset.getOffset().contains("fileOffset");
-  }
-
-  @VisibleForTesting
-  static String getFileName(String offset) {
-    JSONObject object = new JSONObject(offset);
-    return object.get("fileName").toString();
-  }
-
-  @VisibleForTesting
-  static int getFileOffset(String offset) {
-    JSONObject object = new JSONObject(offset);
-    return Integer.valueOf(object.get("fileOffset").toString());
-  }
-
   private S3Offset getOffsetFromGivenKey(String key) {
     for (S3Offset offset : offsetsMap.values()) {
       if (offset.getKey() != null && offset.getKey().equals(key)) {
-        return offset;
+        return new S3Offset(offset);
       }
     }
     return null;
@@ -205,7 +181,7 @@ public class AmazonS3SourceImpl extends AbstractAmazonS3Source implements Amazon
           k -> new S3Offset(S3Constants.EMPTY, S3Constants.ZERO, S3Constants.EMPTY, S3Constants.ZERO)
       );
     }
-    return offset;
+    return new S3Offset(offset);
   }
 
   @Override
@@ -251,16 +227,61 @@ public class AmazonS3SourceImpl extends AbstractAmazonS3Source implements Amazon
     noMoreDataEventSent.set(false);
   }
 
+  @Override
+  public long incrementFileFinishedRecordCounter(String filename) {
+    return fileFinishedRecordCount.merge(filename, 1L, Long::sum);
+  }
+
+  @Override
+  public long incrementFileFinishedErrorCounter(String filename) {
+    return fileFinishedErrorCount.merge(filename, 1L, Long::sum);
+  }
+
+  @Override
+  public void sendNewFileEvent(String filename, BatchContext batchContext) {
+    NewFileEvent.EVENT_CREATOR.create(context, batchContext)
+        .with(NewFileEvent.FILE_PATH, filename)
+        .createAndSend();
+  }
+
+  @Override
+  public void sendFileFinishedEvent(String filename, BatchContext batchContext) {
+    long records = fileFinishedRecordCount.containsKey(filename) ? fileFinishedRecordCount.get(filename).longValue() : 0;
+    long errors = fileFinishedErrorCount.containsKey(filename) ? fileFinishedErrorCount.get(filename).longValue() : 0;
+    FinishedFileEvent.EVENT_CREATOR.create(context, batchContext)
+        .with(FinishedFileEvent.FILE_PATH, filename)
+        .with(FinishedFileEvent.RECORD_COUNT, records)
+        .with(FinishedFileEvent.ERROR_COUNT, errors)
+        .createAndSend();
+    destroyFileCounters(filename);
+  }
+
+  private void destroyFileCounters(String filename) {
+    fileFinishedRecordCount.remove(filename);
+    fileFinishedErrorCount.remove(filename);
+  }
 
   @VisibleForTesting
   boolean allFilesAreFinished() {
     boolean filesFinished = true;
     for (S3Offset s3Offset : offsetsMap.values()) {
-      filesFinished = s3Offset.getOffset().equals(S3Constants.MINUS_ONE);
-      if (!filesFinished) {
-        break;
+      if (s3Offset.representsFile()) {
+        filesFinished = s3Offset.getOffset().equals(S3Constants.MINUS_ONE);
+        if (!filesFinished) {
+          break;
+        }
       }
     }
     return filesFinished;
+  }
+
+  // Return a deep copy to avoid the original offsets map being modified
+  @VisibleForTesting
+  public Map<Integer, S3Offset> getOffsetsMap() {
+    Map<Integer, S3Offset> offsetsCopy = new HashMap<>();
+    for (Integer offset : offsetsMap.keySet()) {
+      offsetsCopy.put(offset, offsetsMap.get(offset));
+    }
+    return offsetsCopy;
   }
 }

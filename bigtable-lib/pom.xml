@@ -23,12 +23,12 @@
   <parent>
     <groupId>com.streamsets</groupId>
     <artifactId>streamsets-datacollector-stage-lib-parent</artifactId>
-    <version>3.10.0-SNAPSHOT</version>
+    <version>3.14.0-SNAPSHOT</version>
     <relativePath>../stage-lib-parent</relativePath>
   </parent>
   <groupId>com.streamsets</groupId>
   <artifactId>streamsets-datacollector-bigtable-lib</artifactId>
-  <version>3.10.0-SNAPSHOT</version>
+  <version>3.14.0-SNAPSHOT</version>
   <description>StreamSets Data Collector Google Cloud Bigtable Lib</description>
   <name>StreamSets Data Collector Google Cloud Bigtable Lib</name>
   <packaging>jar</packaging>
@@ -190,6 +190,13 @@
       <groupId>com.streamsets</groupId>
       <artifactId>streamsets-datacollector-common</artifactId>
       <scope>compile</scope>
+      <exclusions>
+        <!-- Exclude guava 28.1-jre due to incompatibility with bigtable version 1.0.0-pre3. See SDC-13215 -->
+        <exclusion>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>com.streamsets</groupId>

@@ -15,6 +15,7 @@
  */
 package com.streamsets.datacollector.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.common.collect.ImmutableSet;
 import com.streamsets.datacollector.creation.StageConfigBean;
 import com.streamsets.pipeline.SDCClassLoader;
@@ -85,6 +86,8 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
   private List<String> inputStreamLabels;
   private List<Class> eventDefs;
   private final boolean bisectable;
+  private String yamlUpgrader;
+  private List<String> tags;
 
   // localized version
   private StageDefinition(
@@ -126,7 +129,9 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
       String inputStreamLabelProviderClass,
       List<String> inputStreamLabels,
       boolean bisectable,
-      List<Class> eventDefs
+      List<Class> eventDefs,
+      String yamlUpgrader,
+      List<String> tags
   ) {
     this.stageDef = stageDef;
     this.libraryDefinition = libraryDefinition;
@@ -181,6 +186,8 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     this.inputStreamLabels = inputStreamLabels;
     this.bisectable = bisectable;
     this.eventDefs = eventDefs;
+    this.yamlUpgrader = yamlUpgrader;
+    this.tags = tags;
   }
 
   @SuppressWarnings("unchecked")
@@ -229,6 +236,8 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     inputStreamLabelProviderClass = def.inputStreamLabelProviderClass;
     inputStreamLabels = def.inputStreamLabels;
     bisectable = def.bisectable;
+    yamlUpgrader = (def.yamlUpgrader.isEmpty()) ? null : def.yamlUpgrader;
+    tags = def.tags;
   }
 
   public StageDefinition(
@@ -268,7 +277,9 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
       int inputStreams,
       String inputStreamLabelProviderClass,
       boolean bisectable,
-      List<Class> eventDefs
+      List<Class> eventDefs,
+      String yamlUpgrader,
+      List<String> tags
   ) {
     this.stageDef = stageDef;
     this.libraryDefinition = libraryDefinition;
@@ -321,6 +332,8 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     this.inputStreamLabelProviderClass = inputStreamLabelProviderClass;
     this.bisectable = bisectable;
     this.eventDefs = eventDefs;
+    this.yamlUpgrader = yamlUpgrader;
+    this.tags = tags;
   }
 
   public List<ExecutionMode> getLibraryExecutionModes() {
@@ -339,6 +352,7 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     return libraryDefinition.getLabel();
   }
 
+  @JsonIgnore
   @Override
   public ClassLoader getStageClassLoader() {
     return classLoader;
@@ -353,6 +367,7 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     return klass.getName();
   }
 
+  @JsonIgnore
   public Class<? extends Stage> getStageClass() {
     return klass;
   }
@@ -431,6 +446,7 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     return hideConfigSet;
   }
 
+  @JsonIgnore
   // This method returns not only main configs, but also all complex ones!
   public Map<String, ConfigDefinition> getConfigDefinitionsMap() {
     return configDefinitionsMap;
@@ -478,6 +494,7 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     return recordsByRef;
   }
 
+  @JsonIgnore
   public StageUpgrader getUpgrader() {
     return upgrader;
   }
@@ -618,7 +635,9 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
         inputStreamLabelProviderClass,
         inputStreamLabels,
         bisectable,
-        eventDefs
+        eventDefs,
+        yamlUpgrader,
+        tags
     );
   }
 
@@ -664,6 +683,7 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
     return stageDef != null ? stageDef.outputStreamsDrivenByConfig(): null;
   }
 
+  @JsonIgnore
   public StageDef getStageDef() {
     return stageDef;
   }
@@ -699,6 +719,14 @@ public class StageDefinition implements PrivateClassLoaderDefinition {
   public List<String> getClassPath() {
     SDCClassLoader classLoader = (SDCClassLoader)getStageClassLoader();
     return Arrays.stream(classLoader.getURLs()).map(URL::getFile).collect(Collectors.toList());
+  }
+
+  public String getYamlUpgrader() {
+    return yamlUpgrader;
+  }
+
+  public List<String> getTags() {
+    return tags;
   }
 }
 

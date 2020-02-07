@@ -86,7 +86,7 @@ public class HBaseTarget extends BaseTarget {
     this.conf = conf;
     // ZooKeeper Quorum may be null for MapRDBTarget
     if (conf.zookeeperQuorum != null) {
-      this.conf.zookeeperQuorum = CharMatcher.WHITESPACE.removeFrom(conf.zookeeperQuorum);
+      this.conf.zookeeperQuorum = CharMatcher.whitespace().removeFrom(conf.zookeeperQuorum);
     }
     this.hbaseRowKey = hbaseRowKey;
     this.hbaseFieldColumnMapping = hbaseFieldColumnMapping;
@@ -287,7 +287,10 @@ public class HBaseTarget extends BaseTarget {
   }
 
   private static StageException throwStageException(Exception e) {
-    if (e instanceof RuntimeException) {
+    if (e instanceof StageException) {
+      return (StageException) e;
+    }
+    else if (e instanceof RuntimeException) {
       Throwable cause = e.getCause();
       if (cause != null) {
         return new StageException(Errors.HBASE_26, cause, cause);

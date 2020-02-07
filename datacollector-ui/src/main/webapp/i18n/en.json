@@ -481,7 +481,7 @@
       "monitoringJSONData": "Pipeline Monitoring",
       "notifications": "Notifications",
       "noStageDefinitionFound": "Could not find stage definition for stage name: {{stageName}}, library: {{library}}",
-      "legacyStageLibFound": "Stage library '{{library}}' is now a legacy stage library and must be installed as a custom stage library.",
+      "legacyStageLibFound": "Stage library '{{library}}' is a legacy library and must be installed separately.",
       "pipelineConfigJSONData": "Pipeline Configuration",
       "pipelinePreviewJSONData": "Preview Data",
       "pipelineRulesJSONData": "Pipeline Rules",
@@ -917,7 +917,7 @@
     "description": "Description",
     "downloadingMessage" : "Downloading support bundle...",
     "generator": "Generator",
-    "infoMessage": "The support bundle allows you to generate an archive file with the information required to troubleshoot various issues with the Data Collector. Please select one or more generators to be included in the archive. Then you can either Download the archive file for review, or Upload it directly to StreamSets.",
+    "infoMessage": "The support bundle allows you to generate an archive file with the information required to troubleshoot various issues with the Data Collector. Please select one or more generators to be included in the archive. Then you can Download the archive file for review and, if necessary, upload it to StreamSets as an attachment in your support ticket.",
     "title": "Support Bundle",
     "uploadedMessage" : "Support bundle was successfully uploaded."
   },

@@ -300,11 +300,11 @@ public abstract class JdbcBaseRunnable implements Runnable, JdbcRunnable {
           );
 
           if (tableFinished.get()) {
-            TableJdbcEvents.createTableFinishedEvent(context, batchContext, tableRuntimeContext);
+            TableFinishedEvent.createTableFinishedEvent(context, batchContext, tableRuntimeContext);
             eventCount++;
           }
           if (schemaFinished.get()) {
-            TableJdbcEvents.createSchemaFinishedEvent(context, batchContext, tableRuntimeContext, schemaFinishedTables);
+            SchemaFinishedEvent.createSchemaFinishedEvent(context, batchContext, tableRuntimeContext, schemaFinishedTables);
             eventCount++;
           }
         } finally {
@@ -333,6 +333,9 @@ public abstract class JdbcBaseRunnable implements Runnable, JdbcRunnable {
           handleSqlException((SQLException)th);
         } else if (e instanceof InterruptedException) {
           LOG.error("Thread {} interrupted", gaugeMap.get(THREAD_NAME));
+        } else if (e instanceof StageException) {
+          // Let the framework handle the StageException instead of handling it yourself. The default behavior for which is to stop pipeline
+          throw (StageException) e;
         } else {
           handleStageError(JdbcErrors.JDBC_67, e);
         }

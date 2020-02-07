@@ -62,7 +62,6 @@ import com.streamsets.pipeline.api.StageException;
 import com.streamsets.pipeline.api.delegate.exported.ClusterJob;
 import com.streamsets.pipeline.api.impl.PipelineUtils;
 import com.streamsets.pipeline.api.impl.Utils;
-import com.streamsets.pipeline.util.SystemProcess;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -123,7 +122,7 @@ public abstract class BaseClusterProvider implements ClusterProvider {
   private static final String CONFIG_ADDITIONAL_CONFIGS_TO_REMOVE = "cluster.slave.configs.remove";
   // List of properties that we want to always remove as they do not make sense when passed from master sdc to slave sdcs
   private static final String []SDC_CONFIGS_TO_ALWAYS_REMOVE = {
-    RuntimeInfo.DATA_COLLECTOR_BASE_HTTP_URL,
+    RuntimeInfo.getBaseHttpUrlAttr(RuntimeInfo.SDC_PRODUCT),
     "http.bindHost"
   };
 
@@ -244,6 +243,7 @@ public abstract class BaseClusterProvider implements ClusterProvider {
       sdcProperties.setProperty(WebServerTask.REALM_FILE_PERMISSION_CHECK, "false");
 
       // Remove always problematical properties
+
       for(String property: SDC_CONFIGS_TO_ALWAYS_REMOVE) {
         sdcProperties.remove(property);
       }
@@ -644,7 +644,7 @@ public abstract class BaseClusterProvider implements ClusterProvider {
       String stageLibName = stageDef.getLibrary();
       if(streamsetsLibsCl.containsKey(stageLibName) || userLibsCL.containsKey(stageLibName)) {
         for(ServiceDependencyDefinition serviceDep : stageDef.getServices()) {
-          ServiceDefinition serviceDef = stageLibrary.getServiceDefinition(serviceDep.getService(), false);
+          ServiceDefinition serviceDef = stageLibrary.getServiceDefinition(serviceDep.getServiceClass(), false);
           getLog().debug("Adding service {} for stage {}", serviceDef.getClassName(), stageDef.getName());
           extractClassLoaderInfo(streamsetsLibsCl, userLibsCL, serviceDef.getStageClassLoader(), serviceDef.getClassName());
         }

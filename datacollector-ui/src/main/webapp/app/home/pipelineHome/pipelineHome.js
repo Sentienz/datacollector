@@ -871,6 +871,11 @@ angular
             };
           }
 
+          if (config.metadata && config.metadata.controlHubTestRun) {
+            // Pipeline is Control Hub test run pipeline - so mark it readonly
+            $scope.isPipelineReadOnly = true;
+          }
+
           updateGraph(config, rules, undefined, undefined, true);
 
           if (_.contains(['RUNNING', 'STARTING'], $rootScope.common.pipelineStatusMap[routeParamPipelineName].status)) {
@@ -1518,10 +1523,9 @@ angular
         $scope.detailPaneConfigDefn = undefined;
 
         _.each($scope.stageLibraries, function (stageLibrary) {
-          if (stageLibrary.name === selectedObject.stageName &&
-            stageLibrary.version === selectedObject.stageVersion) {
+          if (stageLibrary.name === selectedObject.stageName) {
 
-            if (stageLibrary.library === selectedObject.library) {
+            if (stageLibrary.library === selectedObject.library && stageLibrary.version === selectedObject.stageVersion) {
               $scope.detailPaneConfigDefn = stageLibrary;
             }
 

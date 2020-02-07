@@ -27,11 +27,14 @@ import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.model.SSECustomerKey;
+import com.google.common.annotations.VisibleForTesting;
 import com.streamsets.pipeline.api.StageException;
 import com.streamsets.pipeline.api.credential.CredentialValue;
 import com.streamsets.pipeline.common.InterfaceAudience;
 import com.streamsets.pipeline.common.InterfaceStability;
 import com.streamsets.pipeline.lib.util.AntPathMatcher;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -72,7 +75,19 @@ public class AmazonS3Util {
     listObjectsRequest.setBucketName(s3ConfigBean.s3Config.bucket);
     listObjectsRequest.setPrefix(s3ConfigBean.s3Config.commonPrefix);
     listObjectsRequest.setMaxKeys(BATCH_SIZE);
+
     if (s3Offset.getKey() != null) {
+      if (!s3Offset.getKey().isEmpty() && parseOffset(s3Offset) != -1) {
+        S3Object currentObject = s3Client.getObject(s3ConfigBean.s3Config.bucket, s3Offset.getKey());
+        S3ObjectSummary currentObjectSummary = new S3ObjectSummary();
+        currentObjectSummary.setBucketName(currentObject.getBucketName());
+        currentObjectSummary.setKey(currentObject.getKey());
+        currentObjectSummary.setETag(currentObject.getObjectMetadata().getETag());
+        currentObjectSummary.setSize(currentObject.getObjectMetadata().getContentLength());
+        currentObjectSummary.setLastModified(currentObject.getObjectMetadata().getLastModified());
+        currentObjectSummary.setStorageClass(currentObject.getObjectMetadata().getStorageClass());
+        list.add(currentObjectSummary);
+      }
       listObjectsRequest.setMarker(s3Offset.getKey());
     }
 
@@ -177,7 +192,7 @@ public class AmazonS3Util {
       //compare names
       if(s.getKey().compareTo(s3Offset.getKey()) > 0) {
         isEligible = true;
-      } else if (s.getKey().compareTo(s3Offset.getKey()) == 0 && !"-1".equals(s3Offset.getOffset())) {
+      } else if (s.getKey().compareTo(s3Offset.getKey()) == 0 && !S3Constants.MINUS_ONE.equals(s3Offset.getOffset())) {
         //same time stamp, same name
         //If the current offset is not -1, return the file. It means the previous file was partially processed.
         isEligible = true;
@@ -273,5 +288,41 @@ public class AmazonS3Util {
       }
     }
     return s3ObjectSummary;
+  }
+
+  /*
+   * Regular file: Parse the offset Integer
+   * Zipped files: The offset is a json containing fileName + fileOffset
+   * Excel files: Offset contains multiple separators
+   */
+  static Long parseOffset(S3Offset s3Offset) {
+    Long offset;
+    if (s3Offset != null && s3Offset.getOffset().contains(S3Offset.OFFSET_SEPARATOR)) {
+      offset =  Long.valueOf(s3Offset.getOffset().split(S3Offset.OFFSET_SEPARATOR)[1]);
+    } else if (isJSONOffset(s3Offset)) {
+      offset = getFileName(s3Offset.getOffset()).equals(getFileName(s3Offset.getOffset()))
+          ? getFileOffset(s3Offset.getOffset())
+          : 0;
+    } else {
+      offset = Long.valueOf(s3Offset.getOffset());
+    }
+    return offset;
+  }
+
+  @VisibleForTesting
+  static boolean isJSONOffset(S3Offset s3Offset) {
+    return s3Offset.getOffset().contains("fileName") && s3Offset.getOffset().contains("fileOffset");
+  }
+
+  @VisibleForTesting
+  static String getFileName(String offset) {
+    JSONObject object = new JSONObject(offset);
+    return object.get("fileName").toString();
+  }
+
+  @VisibleForTesting
+  static long getFileOffset(String offset) {
+    JSONObject object = new JSONObject(offset);
+    return Long.valueOf(object.get("fileOffset").toString());
   }
 }

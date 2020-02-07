@@ -21,6 +21,7 @@ import com.streamsets.pipeline.api.Config;
 import com.streamsets.pipeline.api.StageException;
 
 import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,15 +33,15 @@ public class YamlStageUpgraderLoader {
   private final static ObjectMapper OBJECT_MAPPER = new ObjectMapper(new YAMLFactory());
 
   private final String stageName;
-  private final String resource;
+  private final URL resource;
 
-  public YamlStageUpgraderLoader(String stageName, String resource) {
+  public YamlStageUpgraderLoader(String stageName, URL resource) {
     this.stageName = stageName;
     this.resource = resource;
   }
 
   public YamlStageUpgrader get() {
-    try (InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(resource)) {
+    try (InputStream is = resource.openStream()) {
       Map yaml = OBJECT_MAPPER.readValue(is, Map.class);
       Integer upgraderVersion = (Integer) yaml.get("upgraderVersion");
       if (upgraderVersion == null || upgraderVersion != 1) {
@@ -58,11 +59,13 @@ public class YamlStageUpgraderLoader {
 
   Map<Integer, UpgradeToVersion> parseToVersions(List list) {
     Map<Integer, UpgradeToVersion> toVersions = new LinkedHashMap<>();
-    for (Map map : (List<Map>) list) {
-      if (map.containsKey("toVersion")) {
-        Integer toVersion = (Integer) map.get("toVersion");
-        List actions = (List) map.get("actions");
-        toVersions.put(toVersion, parseConfigActions(toVersion, actions));
+    if (list != null) {
+      for (Map map : (List<Map>) list) {
+        if (map.containsKey("toVersion")) {
+          Integer toVersion = (Integer) map.get("toVersion");
+          List actions = (List) map.get("actions");
+          toVersions.put(toVersion, parseConfigActions(toVersion, actions));
+        }
       }
     }
     return toVersions;
@@ -88,10 +91,6 @@ public class YamlStageUpgraderLoader {
       action = parseSetConfigAction(wrapper, map);
     } else if (map.containsKey("renameConfig")) {
       action = parseRenameConfigAction(wrapper, map);
-    } else if (map.containsKey("setConfigIfMissing")) {
-      action = parseSetConfigIfMissing(wrapper, map);
-    } else if (map.containsKey("setConfigIfFound")) {
-      action = parseSetConfigIfFound(wrapper, map);
     } else if (map.containsKey("removeConfigs")) {
       action = parseRemoveConfigs(wrapper, map);
     } else if (map.containsKey("replaceConfig")) {
@@ -120,6 +119,10 @@ public class YamlStageUpgraderLoader {
     SetConfigUpgraderAction action = new SetConfigUpgraderAction<>(wrapper);
     action.setName((String) map.get("name"));
     action.setValue(map.get("value"));
+    action.setElseName((String) map.get("elseName"));
+    action.setElseValue(map.get("elseValue"));
+    action.setLookForName((String) map.get("lookForName"));
+    action.setIfValueMatches(map.get("ifValueMatches"));
     return action;
   }
 
@@ -131,32 +134,6 @@ public class YamlStageUpgraderLoader {
     RenameConfigUpgraderAction action = new RenameConfigUpgraderAction<>(wrapper);
     action.setOldNamePattern((String) map.get("oldNamePattern"));
     action.setNewNamePattern((String) map.get("newNamePattern"));
-    return action;
-  }
-
-  SetConfigIfMissingUpgraderAction parseSetConfigIfMissing(
-      Function<?, UpgraderAction.ConfigsAdapter> wrapper,
-      Map<String, Object> map
-  ) {
-    map = (Map) map.get("setConfigIfMissing");
-    SetConfigIfMissingUpgraderAction action =
-        new SetConfigIfMissingUpgraderAction<>(wrapper);
-    action.setLookForName((String) map.get("lookForName"));
-    action.setName((String) map.get("name"));
-    action.setValue(map.get("value"));
-    return action;
-  }
-
-  SetConfigIfFoundUpgraderAction parseSetConfigIfFound(
-      Function<?, UpgraderAction.ConfigsAdapter> wrapper,
-      Map<String, Object> map
-  ) {
-    map = (Map) map.get("setConfigIfFound");
-    SetConfigIfFoundUpgraderAction action =
-        new SetConfigIfFoundUpgraderAction<>(wrapper);
-    action.setLookForName((String) map.get("lookForName"));
-    action.setName((String) map.get("name"));
-    action.setValue((String) map.get("value"));
     return action;
   }
 
@@ -181,7 +158,7 @@ public class YamlStageUpgraderLoader {
     action.setNewValue(map.get("newValue"));
     action.setElseNewValue(map.get("elseNewValue"));
     if (map.containsKey("ifOldValueMatches")) {
-      action.setIfOldValueMatches(map.get("ifOldValueMatches").toString());
+      action.setIfOldValueMatches(map.get("ifOldValueMatches"));
     }
     action.setTokenForOldValue((String) map.get("tokenForOldValue"));
     return action;

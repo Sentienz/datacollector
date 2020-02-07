@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 StreamSets Inc.
+ * Copyright 2019 StreamSets Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package com.streamsets.datacollector.definition;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.io.Resources;
 import com.streamsets.datacollector.config.ConfigDefinition;
 import com.streamsets.datacollector.el.ElConstantDefinition;
 import com.streamsets.datacollector.el.ElFunctionDefinition;
@@ -35,6 +36,9 @@ import com.streamsets.pipeline.api.impl.ErrorMessage;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.net.URL;
+import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -98,7 +102,8 @@ public class TestConfigDefinitionExtractor {
         lines = 2,
         evaluation = ConfigDef.Evaluation.EXPLICIT,
         mode = ConfigDef.Mode.JAVA,
-        elDefs = ELs.class
+        elDefs = ELs.class,
+        displayMode = ConfigDef.DisplayMode.ADVANCED
     )
     public String config;
   }
@@ -154,6 +159,7 @@ public class TestConfigDefinitionExtractor {
     Assert.assertNull(config.getModel());
     Assert.assertEquals("", config.getDependsOn());
     Assert.assertNull(config.getTriggeredByValues());
+    Assert.assertEquals(ConfigDef.DisplayMode.BASIC, config.getDisplayMode());
   }
 
   @Test
@@ -166,6 +172,8 @@ public class TestConfigDefinitionExtractor {
     Assert.assertNull(config.getDefaultValue());
     Assert.assertTrue(config.getElFunctionDefinitions().isEmpty());
     Assert.assertTrue(config.getElConstantDefinitions().isEmpty());
+
+    Assert.assertEquals(ConfigDef.DisplayMode.ADVANCED, config.getDisplayMode());
   }
 
   @Test
@@ -639,6 +647,42 @@ public class TestConfigDefinitionExtractor {
     Assert.assertEquals(expectedFieldNames, gotFieldNames);
   }
 
+  public static class BeanA {
+
+    @ConfigDef(
+        label = "L",
+        required = true,
+        type = ConfigDef.Type.STRING
+    )
+    public String prop;
+
+  }
+
+  public static class BeanASubClass extends BeanA {
+
+    @ConfigDef(
+        label = "LShadow",
+        required = false,
+        type = ConfigDef.Type.STRING
+    )
+    public String prop;
+  }
+
+  @Test
+  public void testConfigBeanSubclassPropertyShadowing() {
+    List<ErrorMessage> errors = ConfigDefinitionExtractor.get().validate(BeanASubClass.class, ImmutableList.of(), "x");
+    Assert.assertTrue(errors.isEmpty());
+    List<ConfigDefinition> configs = ConfigDefinitionExtractor.get().extract(
+        BeanASubClass.class,
+        ImmutableList.of(),
+        "x"
+    );
+    Assert.assertEquals(1, configs.size());
+    Assert.assertEquals("prop", configs.get(0).getFieldName());
+    Assert.assertEquals("LShadow", configs.get(0).getLabel());
+    Assert.assertEquals(false, configs.get(0).isRequired());
+  }
+
   @Test
   public void testGroupsResolution() {
     Assert.assertTrue(ConfigDefinitionExtractor.get().validate(Bean.class, ImmutableList.of("bar", "foo"),
@@ -811,4 +855,58 @@ public class TestConfigDefinitionExtractor {
     Assert.assertTrue(fNames.contains("credential:getWithOptions"));
   }
 
+  public static class DefaultFromResourceClass {
+    @ConfigDef(
+        defaultValueFromResource = "test-default-value-from-resources.txt",
+        type = ConfigDef.Type.STRING,
+        required = true,
+        label = "L"
+    )
+    public String stringConfig;
+  }
+
+  @Test
+  public void testDefaultValueFromResources() {
+    List<ConfigDefinition> configs = ConfigDefinitionExtractor.get().extract(DefaultFromResourceClass.class,
+        Collections.<String>emptyList(), "x");
+    Assert.assertEquals(1, configs.size());
+    ConfigDefinition config = configs.get(0);
+    Assert.assertEquals("This was read from test-default-value-from-resources.txt", config.getDefaultValue());
+  }
+
+  public static class InvalidDefaultFromResourceClass {
+    @ConfigDef(
+        defaultValueFromResource = "not-a-real-filepath.whatever",
+        type = ConfigDef.Type.STRING,
+        required = true,
+        label = "L"
+    )
+    public String stringConfig;
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testInvalidDefaultValueFromResources() {
+    List<ConfigDefinition> configs = ConfigDefinitionExtractor.get().extract(InvalidDefaultFromResourceClass.class,
+        Collections.<String>emptyList(), "x");
+  }
+
+  public static class BothDefaultAndDefaultFromResourceClass {
+    @ConfigDef(
+        defaultValue = "thisDefault",
+        defaultValueFromResource = "test-default-value-from-resources.txt",
+        type = ConfigDef.Type.STRING,
+        required = true,
+        label = "L"
+    )
+    public String stringConfig;
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testBothDefaultAndDefaultValueFromResources() {
+    List<ConfigDefinition> configs = ConfigDefinitionExtractor.get().extract(
+        BothDefaultAndDefaultFromResourceClass.class,
+        Collections.<String>emptyList(),
+        "x"
+    );
+  }
 }

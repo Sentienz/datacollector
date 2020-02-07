@@ -79,6 +79,8 @@ import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPool;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
+import org.glassfish.jersey.client.ClientConfig;
+import org.glassfish.jersey.client.ClientProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,6 +91,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -109,7 +113,14 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
   public static final String MAX_PRIVATE_STAGE_CLASS_LOADERS_KEY = "max.stage.private.classloaders";
   public static final int MAX_PRIVATE_STAGE_CLASS_LOADERS_DEFAULT = 50;
 
-  public static final String IGNORE_STAGE_DEFINITIONS = "ignore.stage.definitions";
+  public static String getIgnoreStageDefinitions() {
+    String propertyName = "ignore.stage.definitions";
+    if (Boolean.getBoolean("streamsets.cloud")) {
+      propertyName = "cloud." + propertyName;
+    }
+    return propertyName;
+  }
+
   public static final String JAVA_UNSUPPORTED_REGEXP = "java.unsupported.regexp";
   public static final String MIN_SDC_VERSION = "min.sdc.version";
 
@@ -149,6 +160,7 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
   private final Configuration configuration;
   private List<? extends ClassLoader> stageClassLoaders;
   private List<StageLibraryDefinition> stageLibraries;
+  private Map<String, StageLibraryDefinition> stageLibraryMap;
   private Map<String, StageDefinition> stageMap;
   private List<StageDefinition> stageList;
   private List<LineagePublisherDefinition> lineagePublisherDefinitions;
@@ -164,7 +176,7 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
   private KeyedObjectPool<String, ClassLoader> privateClassLoaderPool;
   private Map<String, Object> gaugeMap;
   private final Map<String, EventDefinitionJson> eventDefinitionMap = new HashMap<>();
-  private List<RepositoryManifestJson> repositoryManifestList = null;
+  private volatile List<RepositoryManifestJson> repositoryManifestList = null;
 
   @Inject
   public ClassLoaderStageLibraryTask(RuntimeInfo runtimeInfo, BuildInfo buildInfo, Configuration configuration) {
@@ -265,6 +277,7 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
     // Load all stages and other objects from the libraries
     json = ObjectMapperFactory.get();
     stageLibraries = new ArrayList<>();
+    stageLibraryMap = new HashMap<>();
     stageList = new ArrayList<>();
     stageMap = new HashMap<>();
     lineagePublisherDefinitions = new ArrayList<>();
@@ -277,6 +290,7 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
     delegateMap = new HashMap<>();
     loadStages();
     stageLibraries = ImmutableList.copyOf(stageLibraries);
+    stageLibraryMap = ImmutableMap.copyOf(stageLibraryMap);
     stageList = ImmutableList.copyOf(stageList);
     stageMap = ImmutableMap.copyOf(stageMap);
     lineagePublisherDefinitions = ImmutableList.copyOf(lineagePublisherDefinitions);
@@ -342,8 +356,13 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
     this.gaugeMap.put(PRIVATE_POOL_IDLE, new AtomicInteger(0));
     this.gaugeMap.put(PRIVATE_POOL_MAX, maxPrivateClassloaders);
 
-    // auto load stage library definitions
-    getRepositoryManifestList();
+    if (!Boolean.getBoolean("streamsets.cloud")) {
+      // auto load stage library definitions
+      Thread thread = new Thread(this::getRepositoryManifestList);
+      thread.setDaemon(true);
+      thread.setName("ManifestFetcher");
+      thread.start();
+    }
   }
 
   /**
@@ -408,8 +427,8 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
 
     for(StageDefinition stage : stageList) {
       for(ServiceDependencyDefinition service : stage.getServices()) {
-        if(!serviceMap.containsKey(service.getService())) {
-          missingServices.add(Utils.format("Stage {} is missing service {}", stage.getName(), service.getService().getName()));
+        if(!serviceMap.containsKey(service.getServiceClass())) {
+          missingServices.add(Utils.format("Stage {} is missing service {}", stage.getName(), service.getServiceClass().getName()));
         }
       }
     }
@@ -465,7 +484,7 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
   Set<String> loadIgnoreStagesList(StageLibraryDefinition libDef) throws IOException {
     Set<String> ignoreStages = new HashSet<>();
 
-    String ignore = getPropertyFromLibraryProperties(libDef.getClassLoader(), IGNORE_STAGE_DEFINITIONS, "");
+    String ignore = getPropertyFromLibraryProperties(libDef.getClassLoader(), getIgnoreStageDefinitions(), "");
     if(!StringUtils.isEmpty(ignore)) {
       ignoreStages.addAll(Splitter.on(",").trimResults().splitToList(ignore));
     }
@@ -549,6 +568,7 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
           libDef.setVersion(getPropertyFromLibraryProperties(cl, "version", ""));
           LOG.debug("Loading stages and plugins from library '{}' on version {}", libDef.getName(), libDef.getVersion());
           stageLibraries.add(libDef);
+          stageLibraryMap.put(libDef.getName(), libDef);
           libs++;
 
           // Load Stages
@@ -920,7 +940,9 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
 
   @Override
   public List<RepositoryManifestJson> getRepositoryManifestList() {
-    if (repositoryManifestList == null) {
+    if (repositoryManifestList == null &&  !Boolean.getBoolean("streamsets.cloud")) {
+      Instant start = Instant.now();
+
       // initialize when it is called for first time
       repositoryManifestList = new ArrayList<>();
 
@@ -1018,6 +1040,10 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
         additionalRepo.setStageLibraries(additionalList);
         repositoryManifestList.add(additionalRepo);
       }
+
+      Instant end = Instant.now();
+      Duration timeElapsed = Duration.between(start, end);
+      LOG.debug("Time taken for fetching repository manifest files : "+ timeElapsed.getSeconds() + " seconds");
     }
 
     return repositoryManifestList;
@@ -1063,6 +1089,11 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
       "streamsets-datacollector-hdp_2_4-lib",
       "streamsets-datacollector-hdp_2_5-flume-lib",
       "streamsets-datacollector-hdp_2_5-lib",
+      "streamsets-datacollector-hdp_2_6-lib",
+      "streamsets-datacollector-hdp_2_6_1-hive1-lib",
+      "streamsets-datacollector-hdp_2_6_2-hive1-lib",
+      "streamsets-datacollector-hdp_2_6-hive2-lib",
+      "streamsets-datacollector-hdp_2_6-flume-lib",
       "streamsets-datacollector-mapr_5_0-lib",
       "streamsets-datacollector-mapr_5_1-lib"
     );
@@ -1074,8 +1105,11 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
   }
 
   private RepositoryManifestJson getRepositoryManifestFile(String repoUrl) {
+    ClientConfig clientConfig = new ClientConfig();
+    clientConfig.property(ClientProperties.READ_TIMEOUT, 2000);
+    clientConfig.property(ClientProperties.CONNECT_TIMEOUT, 2000);
     RepositoryManifestJson repositoryManifestJson = null;
-    try (Response response = ClientBuilder.newClient().target(repoUrl).request().get()) {
+    try (Response response = ClientBuilder.newClient(clientConfig).target(repoUrl).request().get()) {
       InputStream inputStream = response.readEntity(InputStream.class);
       repositoryManifestJson = ObjectMapperFactory.get().readValue(inputStream, RepositoryManifestJson.class);
     } catch (Exception ex) {
@@ -1098,6 +1132,11 @@ public class ClassLoaderStageLibraryTask extends AbstractTask implements StageLi
   private void updatePrivateClassLoaderPoolMetrics() {
     ((AtomicInteger)this.gaugeMap.get(PRIVATE_POOL_ACTIVE)).set(privateClassLoaderPool.getNumActive());
     ((AtomicInteger)this.gaugeMap.get(PRIVATE_POOL_IDLE)).set(privateClassLoaderPool.getNumIdle());
+  }
+
+  @Override
+  public StageLibraryDefinition getStageLibraryDefinition(String libraryName) {
+    return this.stageLibraryMap.get(libraryName);
   }
 
 }

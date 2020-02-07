@@ -21,6 +21,7 @@ import com.streamsets.pipeline.api.Config;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -39,7 +40,8 @@ public class TestYamlStageUpgraderLoader {
 
   @Test
   public void testToVersion() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderToVersion.yaml");
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderToVersion.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
     YamlStageUpgrader upgrader = loader.get();
 
     List<Config> configs = upgrader.upgrade("lib", "stage", "instance", 0, 0, new ArrayList<>());
@@ -62,14 +64,18 @@ public class TestYamlStageUpgraderLoader {
 
   @Test
   public void testSetConfigAction() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderActions.yaml");
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderActions.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
     YamlStageUpgrader upgrader = loader.get();
 
     List<Config> configs = new ArrayList<>();
+    configs.add(new Config("set2", false));
     configs.add(new Config("listConfig", ImmutableList.of(ImmutableMap.of())));
     configs = upgrader.upgrade("lib", "stage", "instance", 0, 1, configs);
     Assert.assertEquals(5, configs.size());
-    Assert.assertEquals("SET", find(configs, "set1").getValue());
+
+    //testing EL
+    Assert.assertEquals("false/", find(configs, "set1").getValue());
     Assert.assertEquals(true, find(configs, "set2").getValue());
     Assert.assertEquals(1, find(configs, "set3").getValue());
     Assert.assertEquals(Collections.emptyList(), find(configs, "set4").getValue());
@@ -77,8 +83,58 @@ public class TestYamlStageUpgraderLoader {
   }
 
   @Test
+  public void testSetConfigActionWithLookForName() {
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderActions.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
+    YamlStageUpgrader upgrader = loader.get();
+
+    List<Config> configs = new ArrayList<>();
+    configs.add(new Config("a", "A"));
+    configs.add(new Config("c", "xFOOx"));
+    configs.add(new Config("d", ImmutableList.of(1)));
+    configs.add(new Config("listConfig", ImmutableList.of(ImmutableMap.of("b", "BB"))));
+    configs = upgrader.upgrade("lib", "stage", "instance", 1, 2, configs);
+    Assert.assertEquals(8, configs.size());
+    Assert.assertEquals("A", find(configs, "a").getValue());
+    Assert.assertEquals("X", find(configs, "x").getValue());
+    Assert.assertEquals("xFOOx", find(configs, "c").getValue());
+    Assert.assertEquals(true, find(configs, "new1").getValue());
+    Assert.assertEquals(ImmutableList.of(1), find(configs, "d").getValue());
+    Assert.assertEquals(ImmutableList.of(), find(configs, "new2").getValue());
+    Assert.assertEquals("Z", find(configs, "z").getValue());
+    Assert.assertEquals(ImmutableList.of(ImmutableMap.of("b", "B")), find(configs, "listConfig").getValue());
+  }
+
+  @Test
+  public void testSetConfigActionWithElse() {
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderActions.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
+    YamlStageUpgrader upgrader = loader.get();
+
+    List<Config> configs = new ArrayList<>();
+    configs.add(new Config("a", "A"));
+    configs.add(new Config("c", "BAR"));
+    configs.add(new Config("d", "xFOOx"));
+    configs.add(new Config("e", "BAR"));
+    configs.add(new Config("listConfig", ImmutableList.of(ImmutableMap.of("b", "B"))));
+    configs = upgrader.upgrade("lib", "stage", "instance", 2, 3, configs);
+    Assert.assertEquals(10, configs.size());
+    Assert.assertEquals("A", find(configs, "a").getValue());
+    Assert.assertEquals("Y", find(configs, "y").getValue());
+    Assert.assertEquals("BAR", find(configs, "c").getValue());
+    Assert.assertEquals(true, find(configs, "new1").getValue());
+    Assert.assertEquals("xFOOx", find(configs, "d").getValue());
+    Assert.assertEquals(true, find(configs, "caseA").getValue());
+    Assert.assertEquals("BAR", find(configs, "e").getValue());
+    Assert.assertEquals(5, find(configs, "caseD").getValue());
+    Assert.assertEquals("Z", find(configs, "z").getValue());
+    Assert.assertEquals(ImmutableList.of(ImmutableMap.of("a", "A", "b", "B")), find(configs, "listConfig").getValue());
+  }
+
+  @Test
   public void testRenameConfigAction() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderActions.yaml");
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderActions.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
     YamlStageUpgrader upgrader = loader.get();
 
     List<Config> configs = new ArrayList<>();
@@ -86,7 +142,7 @@ public class TestYamlStageUpgraderLoader {
     configs.add(new Config("old", "V1"));
     configs.add(new Config("old.a", "V2"));
     configs.add(new Config("listConfig", ImmutableList.of(ImmutableMap.of("old", "V3"))));
-    configs = upgrader.upgrade("lib", "stage", "instance", 1, 2, configs);
+    configs = upgrader.upgrade("lib", "stage", "instance", 3, 4, configs);
     Assert.assertEquals(4, configs.size());
     Assert.assertEquals("X", find(configs, "x").getValue());
     Assert.assertEquals("V1", find(configs, "new").getValue());
@@ -94,40 +150,10 @@ public class TestYamlStageUpgraderLoader {
     Assert.assertEquals(ImmutableList.of(ImmutableMap.of("new", "V3")), find(configs, "listConfig").getValue());
   }
 
-
-  @Test
-  public void testSetConfigIfMissing() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderActions.yaml");
-    YamlStageUpgrader upgrader = loader.get();
-
-    List<Config> configs = new ArrayList<>();
-    configs.add(new Config("a", "A"));
-    configs.add(new Config("listConfig", ImmutableList.of(ImmutableMap.of("b", "B"))));
-    configs = upgrader.upgrade("lib", "stage", "instance", 2, 3, configs);
-    Assert.assertEquals(3, configs.size());
-    Assert.assertEquals("A", find(configs, "a").getValue());
-    Assert.assertEquals("Y", find(configs, "y").getValue());
-    Assert.assertEquals(ImmutableList.of(ImmutableMap.of("a", "A", "b", "B")), find(configs, "listConfig").getValue());
-  }
-
-  @Test
-  public void testSetConfigIfFound() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderActions.yaml");
-    YamlStageUpgrader upgrader = loader.get();
-
-    List<Config> configs = new ArrayList<>();
-    configs.add(new Config("a", "A"));
-    configs.add(new Config("listConfig", ImmutableList.of(ImmutableMap.of("b", "BB"))));
-    configs = upgrader.upgrade("lib", "stage", "instance", 3, 4, configs);
-    Assert.assertEquals(3, configs.size());
-    Assert.assertEquals("A", find(configs, "a").getValue());
-    Assert.assertEquals("X", find(configs, "x").getValue());
-    Assert.assertEquals(ImmutableList.of(ImmutableMap.of("b", "B")), find(configs, "listConfig").getValue());
-  }
-
   @Test
   public void testRemoveConfigs() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderActions.yaml");
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderActions.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
     YamlStageUpgrader upgrader = loader.get();
 
     List<Config> configs = new ArrayList<>();
@@ -143,7 +169,8 @@ public class TestYamlStageUpgraderLoader {
 
   @Test
   public void testReplaceConfigs() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderActions.yaml");
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderActions.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
     YamlStageUpgrader upgrader = loader.get();
 
     List<Config> configs = new ArrayList<>();
@@ -161,11 +188,13 @@ public class TestYamlStageUpgraderLoader {
     configs = upgrader.upgrade("lib", "stage", "instance", 5, 6, configs);
     Assert.assertEquals(11, configs.size());
     Assert.assertEquals("X", find(configs, "x").getValue());
-    Assert.assertEquals("AA", find(configs, "a").getValue());
+    // testing EL
+    Assert.assertEquals("X/AA", find(configs, "a").getValue());
     Assert.assertEquals("AA", find(configs, "aa").getValue());
     Assert.assertEquals("B", find(configs, "aaa").getValue());
     Assert.assertEquals("C", find(configs, "aaaa").getValue());
-    Assert.assertEquals(true, find(configs, "aaaaa").getValue());
+    // testing EL
+    Assert.assertEquals("X/CC", find(configs, "aaaaa").getValue());
     Assert.assertEquals("BAR", find(configs, "b").getValue());
     Assert.assertEquals("NOFOO", find(configs, "bb").getValue());
     Assert.assertEquals("oldvalue=foo", find(configs, "bbb").getValue());
@@ -175,7 +204,8 @@ public class TestYamlStageUpgraderLoader {
 
   @Test
   public void testStringCollectionsConfigs() {
-    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", "test-yamlUpgraderActions.yaml");
+    URL yamlResource = ClassLoader.getSystemClassLoader().getResource("test-yamlUpgraderActions.yaml");
+    YamlStageUpgraderLoader loader = new YamlStageUpgraderLoader("stage", yamlResource);
     YamlStageUpgrader upgrader = loader.get();
 
     List<Config> configs = new ArrayList<>();

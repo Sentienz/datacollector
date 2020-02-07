@@ -15,8 +15,10 @@
  */
 package com.streamsets.datacollector.event.handler.remote;
 
+import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
@@ -24,9 +26,12 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.streamsets.datacollector.config.StageDefinition;
 import com.streamsets.datacollector.config.dto.PipelineConfigAndRules;
+import com.streamsets.datacollector.creation.PipelineBeanCreator;
+import com.streamsets.datacollector.creation.PipelineConfigBean;
 import com.streamsets.datacollector.event.binding.MessagingJsonToFromDto;
 import com.streamsets.datacollector.event.client.api.EventClient;
 import com.streamsets.datacollector.event.client.api.EventException;
+import com.streamsets.datacollector.event.client.impl.EventClientImpl;
 import com.streamsets.datacollector.event.dto.AckEvent;
 import com.streamsets.datacollector.event.dto.AckEventStatus;
 import com.streamsets.datacollector.event.dto.BlobDeleteEvent;
@@ -55,7 +60,10 @@ import com.streamsets.datacollector.event.dto.SyncAclEvent;
 import com.streamsets.datacollector.event.handler.DataCollector;
 import com.streamsets.datacollector.event.handler.EventHandlerTask;
 import com.streamsets.datacollector.event.json.ClientEventJson;
+import com.streamsets.datacollector.event.json.MetricRegistryJson;
+import com.streamsets.datacollector.event.json.SDCMetricsJson;
 import com.streamsets.datacollector.event.json.ServerEventJson;
+import com.streamsets.datacollector.execution.PipelineState;
 import com.streamsets.datacollector.execution.Runner;
 import com.streamsets.datacollector.execution.StartPipelineContextBuilder;
 import com.streamsets.datacollector.io.DataStore;
@@ -75,8 +83,10 @@ import com.streamsets.datacollector.stagelibrary.StageLibraryTask;
 import com.streamsets.datacollector.task.AbstractTask;
 import com.streamsets.datacollector.util.Configuration;
 import com.streamsets.datacollector.util.DisconnectedSecurityUtils;
+import com.streamsets.datacollector.util.PipelineException;
 import com.streamsets.lib.security.http.AbstractSSOService;
 import com.streamsets.lib.security.http.DisconnectedSSOManager;
+import com.streamsets.lib.security.http.RemoteSSOService;
 import com.streamsets.lib.security.http.SSOConstants;
 import com.streamsets.pipeline.api.impl.Utils;
 import com.streamsets.pipeline.lib.executor.SafeScheduledExecutorService;
@@ -104,29 +114,46 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.streamsets.datacollector.event.handler.remote.RemoteDataCollector.DEFAULT_SEND_METRIC_ATTEMPTS;
+import static com.streamsets.datacollector.event.handler.remote.RemoteDataCollector.SEND_METRIC_ATTEMPTS;
+
+
 public class RemoteEventHandlerTask extends AbstractTask implements EventHandlerTask {
   private static final Logger LOG = LoggerFactory.getLogger(RemoteEventHandlerTask.class);
   private static final long DEFAULT_PING_FREQUENCY = 5000;
   private static final long SYSTEM_LIMIT_MIN_PING_FREQUENCY = 5000;
   private static final long DEFAULT_STATUS_EVENTS_INTERVAL = 60000;
+  // Default pipeline metrics interval is set to -1 because we are disabling this feature by default
+  private static final long DEFAULT_PIPELINE_METRICS_INTERVAL = -1;
   private static final long SYSTEM_LIMIT_MIN_STATUS_EVENTS_INTERVAL = 30000;
   private static final String REMOTE_CONTROL = AbstractSSOService.CONFIG_PREFIX + "remote.control.";
+
   public static final String REMOTE_JOB_LABELS = REMOTE_CONTROL + "job.labels";
   private static final String REMOTE_URL_PING_INTERVAL = REMOTE_CONTROL  + "ping.frequency";
   private static final String REMOTE_URL_SEND_ALL_STATUS_EVENTS_INTERVAL = REMOTE_CONTROL + "status.events.interval";
+  private static final String REMOTE_URL_SEND_ALL_PIPELINE_METRICS_INTERVAL_MILLIS = REMOTE_CONTROL + "pipeline.metrics.interval.millis";
   private static final String DEFAULT_REMOTE_JOB_LABELS = "all";
   private static final String REMOTE_CONTROL_EVENTS_RECIPIENT = REMOTE_CONTROL + "events.recipient";
   private static final String DEFAULT_REMOTE_CONTROL_EVENTS_RECIPIENT = "jobrunner-app";
   private static final String REMOTE_CONTROL_PROCESS_EVENTS_RECIPIENTS = REMOTE_CONTROL + "process.events.recipients";
+  private static final String REMOTE_URL_SYNC_EVENTS_PING_FREQUENCY = REMOTE_CONTROL  + "sync.events.ping.frequency";
+  private static final String REMOTE_URL_HEARTBEAT_FREQUENCY = REMOTE_CONTROL  + "heartbeat.ping.frequency";
+  private static final int DEFAULT_REMOTE_URL_HEARTBEAT_FREQUENCY = 60000;
+  private static final int DEFAULT_REMOTE_URL_SYNC_EVENTS_PING_FREQUENCY = 5000;
   private static final String DEFAULT_REMOTE_CONTROL_PROCESS_EVENTS_RECIPIENTS = "jobrunner-app,timeseries-app";
+  private static final String TIMESERIES_APP = "timeseries-app";
+  private static final String REMOTE_URL_PIPELINE_STATUSES_ENDPOINT = "jobrunner/rest/v1/job/pipelineStatusEvents";
+  private static final String REMOTE_URL_PIPELINE_STATUS_ENDPOINT = "jobrunner/rest/v1/job/pipelineStatusEvent";
+  private static final String REMOTE_URL_SDC_PROCESS_METRICS_ENDPOINT = "jobrunner/rest/v1/sdc/processMetrics";
+  private static final String REMOTE_URL_SDC_HEARTBEAT_ENDPOINT = "jobrunner/rest/v1/sdc/updateLastModifiedTime";
   public static final String OFFSET = "offset";
   public static final int OFFSET_PROTOCOL_VERSION = 2;
-
-
+  private static final String DPM_JOB_ID = "dpm.job.id";
+  private static final String JOB_ID = "JOB_ID";
   private final DataCollector remoteDataCollector;
-  private final EventClient eventSenderReceiver;
   private final MessagingJsonToFromDto jsonToFromDto;
   private final SafeScheduledExecutorService executorService;
+  private final SafeScheduledExecutorService syncEventsExecutorService;
   private final StageLibraryTask stageLibrary;
   private final RuntimeInfo runtimeInfo;
   private final List<String> appDestinationList;
@@ -134,38 +161,62 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
   private final List<String> labelList;
   private final Map<String, String> requestHeader;
   private final long defaultPingFrequency;
+  private final long pipelineStatusSyncEventsSendFrequency;
+  private final long heartbeatSendFrequency;
   private final Stopwatch stopWatch;
+  private final Stopwatch stopWatchForSyncEvents;
   private final long sendAllStatusEventsInterval;
   private final DataStore dataStore;
-
+  private final long sendAllPipelineMetricsInterval;
+  private String jobRunnerMetricsUrl;
+  private String messagingEventsUrl;
+  private Configuration conf;
+  private final int attempts;
+  private String jobRunnerPipelineStatusEventsUrl;
+  private String jobRunnerPipelineStatusEventUrl;
+  private String jobRunnerSdcProcessMetricsEventUrl;
+  private String jobRunnerSdcHeartBeatUrl;
+  private boolean shouldSendSyncEvents;
+  private int percentOfWaitIntervalBeforeSkip;
+  // config to send via sync or async fashion till SDC-13109 is in
+  public static final String SHOULD_SEND_SYNC_EVENTS = AbstractSSOService.CONFIG_PREFIX + "should.send.sync.events";
+  private static final boolean SHOULD_SEND_SYNC_EVENTS_DEFAULT = false;
+  // Percent of sendAllStatusEventsInterval after which sending events will be skipped
+  public static final String PERCENT_OF_WAIT_INTERVAL_BEFORE_SKIP = AbstractSSOService.CONFIG_PREFIX +
+      "percent.wait.interval.before.skip";
+  public static final int DEFAULT_PERCENT_OF_WAIT_INTERVAL_BEFORE_SKIP = 70;
 
   public RemoteEventHandlerTask(
       DataCollector remoteDataCollector,
-      EventClient eventSenderReceiver,
       SafeScheduledExecutorService executorService,
+      SafeScheduledExecutorService syncEventsExecutorService,
       StageLibraryTask stageLibrary,
       RuntimeInfo runtimeInfo,
       Configuration conf
   ) {
-    this(remoteDataCollector, eventSenderReceiver, executorService, stageLibrary, runtimeInfo, conf, null);
+    this(remoteDataCollector, executorService, syncEventsExecutorService, stageLibrary, runtimeInfo, conf, null);
   }
 
   public RemoteEventHandlerTask(
       DataCollector remoteDataCollector,
-      EventClient eventSenderReceiver,
       SafeScheduledExecutorService executorService,
+      SafeScheduledExecutorService syncEventsExecutorService,
       StageLibraryTask stageLibrary,
       RuntimeInfo runtimeInfo,
       Configuration conf,
       DataStore disconnectedSsoCredentialsDataStore
   ) {
     super("REMOTE_EVENT_HANDLER");
+
     this.remoteDataCollector = remoteDataCollector;
     this.jsonToFromDto = MessagingJsonToFromDto.INSTANCE;
     this.executorService = executorService;
-    this.eventSenderReceiver = eventSenderReceiver;
+    this.syncEventsExecutorService = syncEventsExecutorService;
     this.stageLibrary = stageLibrary;
     this.runtimeInfo = runtimeInfo;
+    this.conf = conf;
+    this.attempts = conf.get(SEND_METRIC_ATTEMPTS, DEFAULT_SEND_METRIC_ATTEMPTS);
+    this.shouldSendSyncEvents = conf.get(SHOULD_SEND_SYNC_EVENTS, SHOULD_SEND_SYNC_EVENTS_DEFAULT);
     appDestinationList = Arrays.asList(conf.get(
         REMOTE_CONTROL_EVENTS_RECIPIENT,
         DEFAULT_REMOTE_CONTROL_EVENTS_RECIPIENT
@@ -180,17 +231,28 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
     defaultPingFrequency = Math.max(conf.get(REMOTE_URL_PING_INTERVAL, DEFAULT_PING_FREQUENCY),
         SYSTEM_LIMIT_MIN_PING_FREQUENCY
     );
+    pipelineStatusSyncEventsSendFrequency = Math.max(
+        conf.get(REMOTE_URL_SYNC_EVENTS_PING_FREQUENCY, DEFAULT_REMOTE_URL_SYNC_EVENTS_PING_FREQUENCY),
+        SYSTEM_LIMIT_MIN_PING_FREQUENCY
+    );
+    heartbeatSendFrequency = Math.max(conf.get(REMOTE_URL_HEARTBEAT_FREQUENCY, DEFAULT_REMOTE_URL_HEARTBEAT_FREQUENCY),
+        SYSTEM_LIMIT_MIN_PING_FREQUENCY);
+
     sendAllStatusEventsInterval = Math.max(
         conf.get(REMOTE_URL_SEND_ALL_STATUS_EVENTS_INTERVAL, DEFAULT_STATUS_EVENTS_INTERVAL),
         SYSTEM_LIMIT_MIN_STATUS_EVENTS_INTERVAL
     );
+    sendAllPipelineMetricsInterval = conf.get(REMOTE_URL_SEND_ALL_PIPELINE_METRICS_INTERVAL_MILLIS, DEFAULT_PIPELINE_METRICS_INTERVAL);
+    percentOfWaitIntervalBeforeSkip = conf.get(PERCENT_OF_WAIT_INTERVAL_BEFORE_SKIP, DEFAULT_PERCENT_OF_WAIT_INTERVAL_BEFORE_SKIP);
     requestHeader = new HashMap<>();
     requestHeader.put(SSOConstants.X_REST_CALL, SSOConstants.SDC_COMPONENT_NAME);
     requestHeader.put(SSOConstants.X_APP_AUTH_TOKEN, runtimeInfo.getAppAuthToken());
     requestHeader.put(SSOConstants.X_APP_COMPONENT_ID, this.runtimeInfo.getId());
     stopWatch = Stopwatch.createUnstarted();
+    stopWatchForSyncEvents = Stopwatch.createUnstarted();
 
     File storeFile = new File(runtimeInfo.getDataDir(), DisconnectedSSOManager.DISCONNECTED_SSO_AUTHENTICATION_FILE);
+    remoteDataCollector.init();
     if (disconnectedSsoCredentialsDataStore != null) {
       dataStore = disconnectedSsoCredentialsDataStore;
     } else {
@@ -209,7 +271,16 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
         }
       }
     }
-    remoteDataCollector.init();
+    String remoteBaseURL = RemoteSSOService.getValidURL(conf.get(RemoteSSOService.DPM_BASE_URL_CONFIG,
+        RemoteSSOService.DPM_BASE_URL_DEFAULT
+    ));
+    jobRunnerMetricsUrl = remoteBaseURL + "jobrunner/rest/v1/jobs/metrics";
+    messagingEventsUrl = remoteBaseURL + RemoteDataCollector.MESSAGING_EVENTS_URL;
+    jobRunnerPipelineStatusEventsUrl = remoteBaseURL + REMOTE_URL_PIPELINE_STATUSES_ENDPOINT;
+    jobRunnerPipelineStatusEventUrl = remoteBaseURL + REMOTE_URL_PIPELINE_STATUS_ENDPOINT;
+    jobRunnerSdcProcessMetricsEventUrl = remoteBaseURL + REMOTE_URL_SDC_PROCESS_METRICS_ENDPOINT;
+    jobRunnerSdcHeartBeatUrl = remoteBaseURL + REMOTE_URL_SDC_HEARTBEAT_ENDPOINT;
+
   }
 
   @VisibleForTesting
@@ -217,11 +288,29 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
     return dataStore;
   }
 
+  @VisibleForTesting
+  String getJobRunnerPipelineStatusEventsUrl() {
+    return jobRunnerPipelineStatusEventsUrl;
+  }
+
+  @VisibleForTesting
+  String getJobRunnerPipelineStatusEventUrl() {
+    return jobRunnerPipelineStatusEventUrl;
+  }
+
+  @VisibleForTesting
+  String getSdcProcessMetricsEventUrl() {
+    return jobRunnerSdcProcessMetricsEventUrl;
+  }
+
+
   @Override
   public void runTask() {
+    this.shouldSendSyncEvents = conf.get(SHOULD_SEND_SYNC_EVENTS, SHOULD_SEND_SYNC_EVENTS_DEFAULT);
+    LOG.info("Will send sync events: {}", this.shouldSendSyncEvents);
     executorService.submit(new EventHandlerCallable(
         remoteDataCollector,
-        eventSenderReceiver,
+        new EventClientImpl(conf),
         jsonToFromDto,
         new ArrayList<>(),
         new ArrayList<>(),
@@ -233,9 +322,30 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
         requestHeader,
         stopWatch,
         sendAllStatusEventsInterval,
+        sendAllPipelineMetricsInterval,
         new LinkedHashMap<>(),
         runtimeInfo
     ));
+    if (shouldSendSyncEvents) {
+      HeartbeatSender heartbeatSender =  new HeartbeatSender(new EventClientImpl(conf));
+      syncEventsExecutorService.scheduleAtFixedRate(
+          heartbeatSender,
+          1000,
+          heartbeatSendFrequency,
+          TimeUnit.MILLISECONDS
+      );
+      syncEventsExecutorService.submit(new SyncEventSender(
+          new EventClientImpl(conf),
+          remoteDataCollector,
+          jsonToFromDto,
+          sendAllStatusEventsInterval,
+          runtimeInfo,
+          syncEventsExecutorService,
+          stopWatchForSyncEvents,
+          pipelineStatusSyncEventsSendFrequency,
+          percentOfWaitIntervalBeforeSkip
+      ));
+    }
   }
 
   private ClientEvent getStartupReportEvent() {
@@ -259,7 +369,7 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
         labelList,
         OFFSET_PROTOCOL_VERSION,
         Strings.emptyToNull(runtimeInfo.getDeploymentId()),
-        runtime.totalMemory()
+        runtime.maxMemory()
     );
     return new ClientEvent(
         UUID.randomUUID().toString(),
@@ -517,6 +627,227 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
     return sourceOffset;
   }
 
+  class HeartbeatSender implements Runnable {
+    private EventClient eventClient;
+
+    public HeartbeatSender(
+        EventClient eventClient
+    ) {
+      this.eventClient = eventClient;
+    }
+
+    @Override
+    public void run() {
+      try {
+        callHeartBeatSender();
+      } catch (Exception e) {
+        LOG.warn("Cannot send heartbeat to SCH: {}", e, e);
+      }
+    }
+
+    private void callHeartBeatSender() {
+      LOG.debug("HeartBeat sender started");
+      long startTime = System.currentTimeMillis();
+      eventClient.sendSyncEvents(jobRunnerSdcHeartBeatUrl, new HashMap<>(), requestHeader, null, 1);
+      long endTime = System.currentTimeMillis();
+      LOG.debug("HeartBeat sender ended");
+      logWarningIfAPICallTimeExceedsThreshold(jobRunnerSdcHeartBeatUrl, 30000, startTime, endTime);
+    }
+  }
+
+  private static void logWarningIfAPICallTimeExceedsThreshold(String apiName, long threshold, long startTime, long endTime) {
+    long duration = endTime - startTime;
+    if (duration > threshold) {
+      LOG.warn("Time taken to make {} call: {} secs", apiName, duration / 1000);
+    }
+  }
+
+  class SyncEventSender implements Callable<Void> {
+    private final DataCollector remoteDataCollector;
+    private final MessagingJsonToFromDto jsonToFromDto;
+    private final long waitBetweenSendingStatusEvents;
+    private RuntimeInfo runtimeInfo;
+    private final SafeScheduledExecutorService syncEventsExecutorService;
+    private final EventClient eventClient;
+    private final Stopwatch stopWatch;
+    private long delay;
+    private int percentOfWaitIntervalBeforeSkip;
+
+    public SyncEventSender(
+        EventClient eventClient,
+        DataCollector remoteDataCollector,
+        MessagingJsonToFromDto jsonToFromDto,
+        long waitBetweenSendingStatusEvents,
+        RuntimeInfo runtimeInfo,
+        SafeScheduledExecutorService syncEventsExecutorService,
+        Stopwatch stopWatch,
+        long delay,
+        int percentOfWaitIntervalBeforeSkip) {
+      this.eventClient = eventClient;
+      this.remoteDataCollector = remoteDataCollector;
+      this.jsonToFromDto = jsonToFromDto;
+      this.waitBetweenSendingStatusEvents = waitBetweenSendingStatusEvents;
+      this.runtimeInfo = runtimeInfo;
+      this.syncEventsExecutorService = syncEventsExecutorService;
+      this.delay = delay;
+      this.stopWatch = stopWatch;
+      this.percentOfWaitIntervalBeforeSkip = percentOfWaitIntervalBeforeSkip;
+    }
+
+    @Override
+    public Void call() {
+      try {
+        // This should be used by SDC > 3.12 to send critical messages to SCH directly.
+        callSyncSender();
+      } catch (Exception ex) {
+        // only log a warning with error message to avoid filling up the logs in case SDC cannot connect to SCH
+        LOG.warn("Cannot connect to send sync events: {}", ex.toString());
+        LOG.trace("Entire error message", ex);
+      } finally {
+        syncEventsExecutorService.schedule(new SyncEventSender(
+            eventClient,
+            remoteDataCollector,
+            jsonToFromDto,
+            waitBetweenSendingStatusEvents,
+            runtimeInfo,
+            syncEventsExecutorService,
+            stopWatch,
+            delay,
+            percentOfWaitIntervalBeforeSkip
+
+        ), delay, TimeUnit.MILLISECONDS);
+      } return null;
+    }
+
+    private void callSyncSender() {
+      if (!stopWatch.isRunning() || stopWatch.elapsed(TimeUnit.MILLISECONDS) > waitBetweenSendingStatusEvents) {
+        // get state of all running pipeline and state of all remote pipelines
+        try {
+          List<PipelineStatusEvent> pipelineStatusEventList = new ArrayList<>();
+
+          stopWatch.reset();
+          for (PipelineAndValidationStatus pipelineAndValidationStatus : remoteDataCollector.getPipelines()) {
+            pipelineStatusEventList.add(createPipelineStatusEvent(jsonToFromDto, pipelineAndValidationStatus));
+          }
+          PipelineStatusEvents pipelineStatusEvents = new PipelineStatusEvents();
+          pipelineStatusEvents.setPipelineStatusEventList(pipelineStatusEventList);
+          LOG.debug("Sending status of all pipelines through sync thread");
+          long startTime = System.currentTimeMillis();
+          eventClient.sendSyncEvents(jobRunnerPipelineStatusEventsUrl,
+              new HashMap<>(),
+              requestHeader,
+              pipelineStatusEvents,
+              1
+          );
+          long endTime = System.currentTimeMillis();
+          LOG.debug("Ended sending status of all pipelines through sync thread");
+          logWarningIfAPICallTimeExceedsThreshold(jobRunnerPipelineStatusEventsUrl, 30000, startTime, endTime);
+          if (hasElapsedWaitPercentInterval(stopWatch,
+              waitBetweenSendingStatusEvents,
+              percentOfWaitIntervalBeforeSkip
+          )) {
+            LOG.warn(
+                "Timer already past {}% of wait interval, so not going to send process metrics event",
+                percentOfWaitIntervalBeforeSkip
+            );
+          } else {
+            LOG.debug("Sending process metrics event through sync thread");
+            startTime = System.currentTimeMillis();
+            eventClient.sendSyncEvents(jobRunnerSdcProcessMetricsEventUrl,
+                new HashMap<>(),
+                requestHeader,
+                getSdcMetricsEvent(runtimeInfo),
+                1
+            );
+            endTime = System.currentTimeMillis();
+            LOG.debug("Ended sending process metrics event through sync thread");
+            logWarningIfAPICallTimeExceedsThreshold(jobRunnerSdcProcessMetricsEventUrl, 30000, startTime, endTime);
+          }
+        } catch (Exception e) {
+          LOG.warn(Utils.format("Error while sending pipeline updates to DPM: '{}'", e), e);
+        }
+      } else {
+        // get state of only remote pipelines which changed state
+        try {
+          List<PipelineAndValidationStatus> pipelineAndValidationStatuses = remoteDataCollector.getRemotePipelinesWithChanges();
+          for (PipelineAndValidationStatus pipelineAndValidationStatus : pipelineAndValidationStatuses) {
+            PipelineStatusEvent pipelineStatusEvent = createPipelineStatusEvent(jsonToFromDto,
+                pipelineAndValidationStatus
+            );
+            if (hasElapsedWaitPercentInterval(stopWatch, waitBetweenSendingStatusEvents, percentOfWaitIntervalBeforeSkip)) {
+              LOG.warn("Timer already past {}% of wait interval, so not going to send any more pipeline updates",
+                  percentOfWaitIntervalBeforeSkip);
+              break;
+            } else {
+              LOG.debug(Utils.format(
+                  "Sending event for remote pipeline: '{}' in status: '{}' through sync thread",
+                  pipelineStatusEvent.getName(),
+                  pipelineStatusEvent.getPipelineStatus()
+              ));
+              long startTime = System.currentTimeMillis();
+              eventClient.sendSyncEvents(jobRunnerPipelineStatusEventUrl,
+                  new HashMap<>(),
+                  requestHeader,
+                  pipelineStatusEvent,
+                  1
+              );
+              long endTime = System.currentTimeMillis();
+              LOG.debug(Utils.format(
+                  "Ended sending event for remote pipeline: '{}' in status: '{}' through sync thread",
+                  pipelineStatusEvent.getName(),
+                  pipelineStatusEvent.getPipelineStatus()
+              ));
+              logWarningIfAPICallTimeExceedsThreshold(jobRunnerPipelineStatusEventUrl, 30000, startTime, endTime);
+            }
+          }
+        } catch (Exception e) {
+          LOG.error(Utils.format("Error while sending a single pipeline status to DPM: {}", e), e);
+        }
+      }
+      if (!stopWatch.isRunning()) {
+        stopWatch.start();
+      }
+    }
+  }
+
+  static boolean hasElapsedWaitPercentInterval(
+      Stopwatch stopWatch, long waitBetweenSendingStatusEvents, int x
+  ) {
+    if (stopWatch.elapsed(TimeUnit.MILLISECONDS) >= (float) x / 100 * waitBetweenSendingStatusEvents) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  static PipelineStatusEvent createPipelineStatusEvent(
+      MessagingJsonToFromDto jsonToFromDto, PipelineAndValidationStatus pipelineAndValidationStatus
+  ) throws JsonProcessingException {
+    PipelineStatusEvent pipelineStatusEvent = new PipelineStatusEvent(
+        pipelineAndValidationStatus.getName(),
+        pipelineAndValidationStatus.getTitle(),
+        pipelineAndValidationStatus.getRev(),
+        pipelineAndValidationStatus.getTimeStamp(),
+        pipelineAndValidationStatus.isRemote(),
+        pipelineAndValidationStatus.getPipelineStatus(),
+        pipelineAndValidationStatus.getMessage(),
+        pipelineAndValidationStatus.getWorkerInfos(),
+        pipelineAndValidationStatus.getValidationStatus(),
+        jsonToFromDto.serialize(BeanHelper.wrapIssues(pipelineAndValidationStatus.getIssues())),
+        pipelineAndValidationStatus.isClusterMode(),
+        pipelineAndValidationStatus.getOffset(),
+        OFFSET_PROTOCOL_VERSION,
+        pipelineAndValidationStatus.getAcl(),
+        pipelineAndValidationStatus.getRunnerCount()
+    );
+    LOG.debug(
+        "Created pipeline status event with name and title {}::{}",
+        pipelineAndValidationStatus.getName(),
+        pipelineAndValidationStatus.getTitle()
+    );
+    return pipelineStatusEvent;
+  }
+
   @VisibleForTesting
   class EventHandlerCallable implements Callable<Void> {
     private final DataCollector remoteDataCollector;
@@ -528,6 +859,7 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
     private final List<String> processAppDestinationList;
     private final Stopwatch stopWatch;
     private final long waitBetweenSendingStatusEvents;
+    private final long waitBetweenSendingPipelineMetrics;
     private List<ClientEvent> ackEventList;
     private List<ClientEvent> remoteEventList;
     private ClientEvent sdcInfoEvent;
@@ -537,7 +869,7 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
 
     public EventHandlerCallable(
         DataCollector remoteDataCollector,
-        EventClient eventSenderReceiver,
+        EventClient messagingEventClient,
         MessagingJsonToFromDto jsonToFromDto,
         List<ClientEvent> ackEventList,
         List<ClientEvent> remoteEventList,
@@ -549,11 +881,12 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
         Map<String, String> requestHeader,
         Stopwatch stopWatch,
         long waitBetweenSendingStatusEvents,
+        long waitBetweenSendingPipelineMetrics,
         Map<ServerEvent, Future<AckEvent>> eventToAckEventFuture,
         RuntimeInfo runtimeInfo
     ) {
       this.remoteDataCollector = remoteDataCollector;
-      this.eventClient = eventSenderReceiver;
+      this.eventClient = messagingEventClient;
       this.jsonToFromDto = jsonToFromDto;
       this.executorService = executorService;
       this.delay = delay;
@@ -565,6 +898,7 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
       this.requestHeader = requestHeader;
       this.stopWatch = stopWatch;
       this.waitBetweenSendingStatusEvents = waitBetweenSendingStatusEvents;
+      this.waitBetweenSendingPipelineMetrics = waitBetweenSendingPipelineMetrics;
       this.eventToAckEventFuture = eventToAckEventFuture;
       this.runtimeInfo = runtimeInfo;
     }
@@ -591,6 +925,7 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
             requestHeader,
             stopWatch,
             waitBetweenSendingStatusEvents,
+            waitBetweenSendingPipelineMetrics,
             eventToAckEventFuture,
             runtimeInfo
         ), delay, TimeUnit.MILLISECONDS);
@@ -608,49 +943,12 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
       return ackEventList;
     }
 
-    private PipelineStatusEvent createPipelineStatusEvent(
-        MessagingJsonToFromDto jsonToFromDto, PipelineAndValidationStatus pipelineAndValidationStatus
-    ) throws JsonProcessingException {
-      PipelineStatusEvent pipelineStatusEvent = new PipelineStatusEvent(
-          pipelineAndValidationStatus.getName(),
-          pipelineAndValidationStatus.getTitle(),
-          pipelineAndValidationStatus.getRev(),
-          pipelineAndValidationStatus.getTimeStamp(),
-          pipelineAndValidationStatus.isRemote(),
-          pipelineAndValidationStatus.getPipelineStatus(),
-          pipelineAndValidationStatus.getMessage(),
-          pipelineAndValidationStatus.getWorkerInfos(),
-          pipelineAndValidationStatus.getValidationStatus(),
-          jsonToFromDto.serialize(BeanHelper.wrapIssues(pipelineAndValidationStatus.getIssues())),
-          pipelineAndValidationStatus.isClusterMode(),
-          pipelineAndValidationStatus.getOffset(),
-          OFFSET_PROTOCOL_VERSION,
-          pipelineAndValidationStatus.getAcl(),
-          pipelineAndValidationStatus.getRunnerCount()
-      );
-      LOG.debug(
-          "Created pipeline status event with name and title {}::{}",
-          pipelineAndValidationStatus.getName(),
-          pipelineAndValidationStatus.getTitle()
-      );
-      return pipelineStatusEvent;
-    }
-
-    @VisibleForTesting
-    void callRemoteControl() {
-      List<ClientEvent> clientEventList = new ArrayList<>();
-      for (ClientEvent ackEvent : ackEventList) {
-        clientEventList.add(ackEvent);
-      }
-      clientEventList.addAll(getQueuedAckEvents());
-      if (sdcInfoEvent != null) {
-        clientEventList.add(sdcInfoEvent);
-      }
+    private void sendEventsAsync(List<ClientEvent> clientEventList) {
       try {
         if (!stopWatch.isRunning() || stopWatch.elapsed(TimeUnit.MILLISECONDS) > waitBetweenSendingStatusEvents) {
           // get state of all running pipeline and state of all remote pipelines
           List<PipelineStatusEvent> pipelineStatusEventList = new ArrayList<>();
-          LOG.debug("Sending status of all pipelines");
+          LOG.debug("Sending status of all pipelines in async fashion");
           for (PipelineAndValidationStatus pipelineAndValidationStatus : remoteDataCollector.getPipelines()) {
             pipelineStatusEventList.add(createPipelineStatusEvent(jsonToFromDto, pipelineAndValidationStatus));
           }
@@ -676,7 +974,7 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
               false,
               false,
               EventType.SDC_PROCESS_METRICS_EVENT,
-              getSdcMetricsEvent(),
+              getSdcMetricsEvent(runtimeInfo),
               null
           ));
         } else {
@@ -703,10 +1001,50 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
         LOG.warn(Utils.format("Error while creating/serializing pipeline status event: '{}'", ex), ex);
       }
       clientEventList.addAll(remoteEventList);
+    }
+
+    @VisibleForTesting
+    void callRemoteControl() {
+      List<ClientEvent> clientEventList = new ArrayList<>();
+      for (ClientEvent ackEvent : ackEventList) {
+        clientEventList.add(ackEvent);
+      }
+      clientEventList.addAll(getQueuedAckEvents());
+      if (sdcInfoEvent != null) {
+        clientEventList.add(sdcInfoEvent);
+      }
+
+      if (!shouldSendSyncEvents) {
+        sendEventsAsync(clientEventList);
+      } else {
+        // sends async message to timeseries-app even if sync events is turned on
+        if (!stopWatch.isRunning() || stopWatch.elapsed(TimeUnit.MILLISECONDS) > waitBetweenSendingStatusEvents) {
+          stopWatch.reset();
+          LOG.debug("Sending metrics event to time-series app");
+          clientEventList.add(new ClientEvent(
+              UUID.randomUUID().toString(),
+              Collections.singletonList(TIMESERIES_APP),
+              false,
+              false,
+              EventType.SDC_PROCESS_METRICS_EVENT,
+              getSdcMetricsEvent(runtimeInfo),
+              null
+          ));
+        }
+      }
       List<ServerEventJson> serverEventJsonList;
       try {
+        // If waitBetweenSendingPipelineMetrics is set to -1, pipeline metrics sending is disabled
+        if (waitBetweenSendingPipelineMetrics != -1 && (!stopWatch.isRunning() || stopWatch.elapsed(TimeUnit.MILLISECONDS) > waitBetweenSendingPipelineMetrics)) {
+          // We're currently sending with attempts set to 0 because we are disabling this function by default
+          sendPipelineMetrics(remoteDataCollector, eventClient, jobRunnerMetricsUrl, requestHeader, attempts);
+        }
+      } catch (IOException | PipelineException e) {
+        LOG.warn("Error while sending metrics to server:  " + e, e);
+      }
+      try {
         List<ClientEventJson> clientEventJsonList = jsonToFromDto.toJson(clientEventList);
-        serverEventJsonList = eventClient.submit("", new HashMap<>(), requestHeader, false, clientEventJsonList);
+        serverEventJsonList = eventClient.submit(messagingEventsUrl, new HashMap<>(), requestHeader, false, clientEventJsonList);
         remoteEventList.clear();
         if (!eventToAckEventFuture.isEmpty()) {
           Set<String> eventIds = clientEventList.stream().map(ClientEvent::getEventId).collect(Collectors.toSet());
@@ -732,17 +1070,6 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
       }
       ackEventList = ackClientEventList;
       sdcInfoEvent = null;
-    }
-
-    private SDCProcessMetricsEvent getSdcMetricsEvent() {
-      OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
-      Runtime runtime = Runtime.getRuntime();
-      SDCProcessMetricsEvent sdcProcessMetricsEvent = new SDCProcessMetricsEvent();
-      sdcProcessMetricsEvent.setTimestamp(System.currentTimeMillis());
-      sdcProcessMetricsEvent.setSdcId(runtimeInfo.getId());
-      sdcProcessMetricsEvent.setCpuLoad(osBean.getProcessCpuLoad() * 100);
-      sdcProcessMetricsEvent.setUsedMemory(runtime.totalMemory() - runtime.freeMemory());
-      return sdcProcessMetricsEvent;
     }
 
     private String handleServerEvent(ServerEvent serverEvent) {
@@ -853,6 +1180,58 @@ public class RemoteEventHandlerTask extends AbstractTask implements EventHandler
       } else {
         return null;
       }
+    }
+  }
+
+  static SDCProcessMetricsEvent getSdcMetricsEvent(RuntimeInfo runtimeInfo) {
+    OperatingSystemMXBean osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+    Runtime runtime = Runtime.getRuntime();
+    SDCProcessMetricsEvent sdcProcessMetricsEvent = new SDCProcessMetricsEvent();
+    sdcProcessMetricsEvent.setTimestamp(System.currentTimeMillis());
+    sdcProcessMetricsEvent.setSdcId(runtimeInfo.getId());
+    sdcProcessMetricsEvent.setCpuLoad(osBean.getProcessCpuLoad() * 100);
+    sdcProcessMetricsEvent.setUsedMemory(runtime.totalMemory() - runtime.freeMemory());
+    return sdcProcessMetricsEvent;
+  }
+
+  static void sendPipelineMetrics(
+      DataCollector remoteDataCollector,
+      EventClient eventClient,
+      String jobRunnerUrl,
+      Map<String, String> requestHeader,
+      long attempts
+  ) throws IOException, PipelineException {
+    if (attempts == 0) {
+      // avoid the below deserialization if never planning to send metrics
+      return;
+    }
+    ObjectMapper objectMapper = ObjectMapperFactory.get();
+    List<SDCMetricsJson> sdcMetricsJsonList = new ArrayList<>();
+    for (PipelineState pipelineState : remoteDataCollector.getRemotePipelines()) {
+      Runner runner = remoteDataCollector.getRunner(pipelineState.getPipelineId(), pipelineState.getRev());
+      if (runner != null) {
+        PipelineConfigBean pipelineConfigBean = PipelineBeanCreator.get()
+            .create(runner.getPipelineConfiguration(), new ArrayList<>(), null);
+        SDCMetricsJson sdcMetricsJson = new SDCMetricsJson();
+
+        Object metrics = runner.getMetrics();
+        if (metrics instanceof MetricRegistry) {
+          MetricRegistry metricRegistry = (MetricRegistry) metrics ;
+          sdcMetricsJson.setMetrics(ObjectMapperFactory.get()
+              .readValue(objectMapper.writer().writeValueAsString(metricRegistry), MetricRegistryJson.class));
+        } else if (metrics instanceof MetricRegistryJson) {
+          sdcMetricsJson.setMetrics((MetricRegistryJson) metrics);
+        }
+
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put(DPM_JOB_ID, (String) pipelineConfigBean.constants.get(JOB_ID));
+        sdcMetricsJson.setMetadata(metadata);
+        sdcMetricsJsonList.add(sdcMetricsJson);
+      }
+    }
+    if (sdcMetricsJsonList.size() != 0) {
+      // We're currently sending with attempts set to 0 because we are disabling this function by default
+      eventClient.submit(jobRunnerUrl, new HashMap<>(), requestHeader, sdcMetricsJsonList, attempts);
     }
   }
 

@@ -23,6 +23,7 @@ import java.util.Set;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class DefinitionsJson {
+  private String schemaVersion = "1";
   private List<PipelineDefinitionJson> pipeline;
   private List<PipelineFragmentDefinitionJson> pipelineFragment;
   private List<PipelineRulesDefinitionJson> pipelineRules;
@@ -34,6 +35,14 @@ public class DefinitionsJson {
   private Map<String, String> stageIcons;
   private List<String> legacyStageLibs;
   private Map<String, EventDefinitionJson> eventDefinitions;
+  private String version;
+  private String executorVersion;
+  private String category;
+  private String categoryLabel;
+
+  public String getSchemaVersion() {
+    return schemaVersion;
+  }
 
   public List<PipelineDefinitionJson> getPipeline() {
     return pipeline;
@@ -122,4 +131,41 @@ public class DefinitionsJson {
   public void setEventDefinitions(Map<String, EventDefinitionJson> eventDefinitions) {
     this.eventDefinitions = eventDefinitions;
   }
+
+  public String getVersion() {
+    return version;
+  }
+
+  public DefinitionsJson setVersion(String version) {
+    this.version = version;
+    return this;
+  }
+
+  public String getExecutorVersion() {
+    return executorVersion;
+  }
+
+  public DefinitionsJson setExecutorVersion(String executorVersion) {
+    this.executorVersion = executorVersion;
+    return this;
+  }
+
+  public String getCategory() {
+    return category;
+  }
+
+  public DefinitionsJson setCategory(String category) {
+    this.category = category;
+    return this;
+  }
+
+  public String getCategoryLabel() {
+    return categoryLabel;
+  }
+
+  public DefinitionsJson setCategoryLabel(String categoryLabel) {
+    this.categoryLabel = categoryLabel;
+    return this;
+  }
+
 }

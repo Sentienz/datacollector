@@ -23,10 +23,12 @@ import com.streamsets.datacollector.el.ElFunctionDefinition;
 import com.streamsets.datacollector.runner.StageDefinitionBuilder;
 import com.streamsets.pipeline.api.ConfigDef;
 import com.streamsets.pipeline.api.ExecutionMode;
+import com.streamsets.pipeline.api.StageDef;
 import com.streamsets.pipeline.api.impl.LocaleInContext;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,7 +52,7 @@ public class TestStageDefinitionLocalization {
                                      Collections.<ElFunctionDefinition>emptyList(),
                                      Collections.<ElConstantDefinition>emptyList(),
                                      0, 0, "mode", 1,
-      Collections.<Class> emptyList(), ConfigDef.Evaluation.IMPLICIT, null));
+      Collections.<Class> emptyList(), ConfigDef.Evaluation.IMPLICIT, null, ConfigDef.DisplayMode.BASIC));
     ModelDefinition model = new ModelDefinition(ModelType.VALUE_CHOOSER, OptionsChooserValues.class.getName(),
                                                 ImmutableList.of("OPTION"), ImmutableList.of("Option"), null,  null, null);
     configs.add(new ConfigDefinition("c2", ConfigDef.Type.MODEL, "Config2Label", "Config2Description", "default",
@@ -58,13 +60,14 @@ public class TestStageDefinitionLocalization {
                                      Collections.<ElFunctionDefinition>emptyList(),
                                      Collections.<ElConstantDefinition>emptyList(),
                                      0, 0, "mode", 1,
-      Collections.<Class> emptyList(), ConfigDef.Evaluation.IMPLICIT, null));
+      Collections.<Class> emptyList(), ConfigDef.Evaluation.IMPLICIT, null, ConfigDef.DisplayMode.BASIC));
     RawSourceDefinition rawSource = new RawSourceDefinition(TRawSourcePreviewer.class.getName(), "*/*", configs);
     ConfigGroupDefinition configGroup = new ConfigGroupDefinition(ImmutableSet.of("GROUP"),
         (Map)ImmutableMap.of(Groups.class.getName(), ImmutableList.of(Groups.GROUP.name())),
         (List)ImmutableList.of(ImmutableMap.of("label", "Group", "name", "GROUP"))
     );
     StageDefinition def = new StageDefinitionBuilder(TestStageDefinitionLocalization.class.getClassLoader(), TProcessor.class, "stage")
+      .withStageDef(Mockito.mock(StageDef.class))
       .withConfig(configs)
       .withErrorStage(true)
       .withRawSourceDefintion(rawSource)

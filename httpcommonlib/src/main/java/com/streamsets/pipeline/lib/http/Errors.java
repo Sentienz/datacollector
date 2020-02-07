@@ -64,7 +64,14 @@ public enum Errors implements ErrorCode {
   HTTP_50("Error sending resource. Reason: {}"),
   HTTP_51("Invalid Resource URI."),
   HTTP_52("Invalid Resource URI. Reason : {}"),
+  HTTP_53("Invalid header: {}"),
 
+  // HTTP Processor
+  HTTP_61("Cannot parse the field '{}' for record '{}': {}"),
+  HTTP_62("Cannot parse the field '{}' as type {} is not supported"),
+  HTTP_63("{} parsing the field '{}' as type {} for record '{}': {}"),
+  HTTP_64("IOException attempting to parse whole file field '{}' for record '{}': {}"),
+  HTTP_65("Input field '{}' does not exist in record '{}'"),
   ;
 
   private final String msg;

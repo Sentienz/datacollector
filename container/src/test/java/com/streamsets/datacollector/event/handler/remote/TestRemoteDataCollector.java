@@ -22,6 +22,7 @@ import com.streamsets.datacollector.config.PipelineConfiguration;
 import com.streamsets.datacollector.config.PipelineFragmentConfiguration;
 import com.streamsets.datacollector.config.RuleDefinitions;
 import com.streamsets.datacollector.config.dto.ValidationStatus;
+import com.streamsets.datacollector.event.client.api.EventClient;
 import com.streamsets.datacollector.event.dto.PipelineStartEvent;
 import com.streamsets.datacollector.execution.Manager;
 import com.streamsets.datacollector.execution.PipelineState;
@@ -158,7 +159,8 @@ public class TestRemoteDataCollector {
         String name,
         String rev,
         List<PipelineStartEvent.InterceptorConfiguration> interceptorConfs,
-        Function<Object, Void> afterActionsFunction
+        Function<Object, Void> afterActionsFunction,
+        boolean remote
     ) throws PipelineStoreException {
       final MockPreviewer mockPreviewer = new MockPreviewer(user, name, rev, interceptorConfs, afterActionsFunction);
       Previewer previewer = mockPreviewer;
@@ -283,7 +285,7 @@ public class TestRemoteDataCollector {
     }
   }
 
-  private static class MockRunner implements Runner {
+  public static class MockRunner implements Runner {
 
     public static int stopCalled;
 
@@ -493,12 +495,6 @@ public class TestRemoteDataCollector {
     }
 
     @Override
-    public Map getUpdateInfo() {
-      // TODO Auto-generated method stub
-      return null;
-    }
-
-    @Override
     public String getToken() {
       // TODO Auto-generated method stub
       return null;
@@ -563,7 +559,7 @@ public class TestRemoteDataCollector {
     }
 
     @Override
-    public void validateConfigs(long timeoutMillis) throws PipelineException {
+    public void validateConfigs(long timeoutMillis) {
       if (name.equals("ns:name")) {
         isValid = true;
       } else {
@@ -576,7 +572,7 @@ public class TestRemoteDataCollector {
     public RawPreview getRawSource(
         int maxLength,
         MultivaluedMap<String, String> previewParams
-    ) throws PipelineRuntimeException, PipelineStoreException {
+    ) {
       // TODO Auto-generated method stub
       return null;
     }
@@ -591,7 +587,7 @@ public class TestRemoteDataCollector {
         List<StageOutput> stagesOverride,
         long timeoutMillis,
         boolean testOrigin
-    ) throws PipelineException {
+    ) {
       previewStarted = true;
     }
 
@@ -622,10 +618,10 @@ public class TestRemoteDataCollector {
     @Override
     public PreviewOutput getOutput() {
       if (isValid) {
-        return new PreviewOutputImpl(PreviewStatus.VALID, null, null, null);
+        return new PreviewOutputImpl(PreviewStatus.VALID, null, (List)null);
       } else {
         Issues issues = new Issues();
-        return new PreviewOutputImpl(PreviewStatus.INVALID, issues, null, null);
+        return new PreviewOutputImpl(PreviewStatus.INVALID, issues, (List)null);
       }
     }
   }
@@ -918,6 +914,9 @@ public class TestRemoteDataCollector {
   @Test
   public void testValidateConfigs() throws Exception {
     try {
+      RuntimeInfo runtimeInfo = Mockito.mock(RuntimeInfo.class);
+      Mockito.when(runtimeInfo.getAppAuthToken()).thenReturn("");
+      Mockito.when(runtimeInfo.getId()).thenReturn("fakeId");
       AclStoreTask aclStoreTask = Mockito.mock(AclStoreTask.class);
       RemoteDataCollector dataCollector = new RemoteDataCollector(
           new Configuration(),
@@ -926,7 +925,7 @@ public class TestRemoteDataCollector {
           new MockPipelineStateStore(),
           aclStoreTask,
           new RemoteStateEventListener(new Configuration()),
-          null,
+          runtimeInfo,
           Mockito.mock(AclCacheHelper.class),
           Mockito.mock(StageLibraryTask.class),
           Mockito.mock(BlobStoreTask.class),
@@ -945,7 +944,12 @@ public class TestRemoteDataCollector {
   @Test
   public void testStopAndDelete() throws Exception {
     try {
+      RuntimeInfo runtimeInfo = Mockito.mock(RuntimeInfo.class);
+      Mockito.when(runtimeInfo.getAppAuthToken()).thenReturn("");
+      Mockito.when(runtimeInfo.getId()).thenReturn("fakeId");
       AclStoreTask aclStoreTask = Mockito.mock(AclStoreTask.class);
+      Configuration configuration = new Configuration();
+      configuration.set(RemoteDataCollector.SEND_METRIC_ATTEMPTS, 1);
       RemoteDataCollector dataCollector = new RemoteDataCollector(
           new Configuration(),
           new MockManager(),
@@ -953,20 +957,31 @@ public class TestRemoteDataCollector {
           new MockPipelineStateStore(),
           aclStoreTask,
           new RemoteStateEventListener(new Configuration()),
-          null,
+          runtimeInfo,
           Mockito.mock(AclCacheHelper.class),
           Mockito.mock(StageLibraryTask.class),
           Mockito.mock(BlobStoreTask.class),
           new SafeScheduledExecutorService(1, "supportBundleExecutor")
       );
+      dataCollector = Mockito.spy(dataCollector);
+      Mockito.when(dataCollector.getRemotePipelines()).thenReturn(new ArrayList<>());
       RemoteDataCollector.StopAndDeleteCallable stopAndDeleteCallable = new RemoteDataCollector.StopAndDeleteCallable(
-          dataCollector, "user", "ns:name", "rev", 600000
+          dataCollector,
+          "user",
+          "ns:name",
+          "rev",
+          600000,
+          Mockito.mock(EventClient.class),
+          "fakeUrl",
+          new HashMap<>(),
+          configuration
       );
       stopAndDeleteCallable.call();
 
       assertEquals(1, MockRunner.stopCalled);
       assertEquals(1, MockPipelineStoreTask.deleteCalled);
       assertEquals(1, MockPipelineStoreTask.deleteRulesCalled);
+      Mockito.verify(dataCollector, Mockito.times(1)).getRemotePipelines();
     } finally {
       MockRunner.stopCalled = 0;
       MockPipelineStateStore.getStateCalled = 0;
