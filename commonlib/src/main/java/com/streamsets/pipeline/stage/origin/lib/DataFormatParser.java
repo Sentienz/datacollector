@@ -410,6 +410,14 @@ public class DataFormatParser {
             .setConfig(WorkbookParserConstants.HEADER, dataFormatConfig.excelHeader)
             .setConfig(WorkbookParserConstants.SHEETS, dataFormatConfig.excelReadAllSheets ? Collections.emptyList() : dataFormatConfig.excelSheetNames);
         break;
+      case SAS:
+        builder
+            .setMaxDataLen(-1);
+        break;
+      case SASXPT:
+        builder
+            .setMaxDataLen(-1);
+        break;
       default:
         throw new IllegalStateException(Utils.format("Unknown data format: {}", dataFormat));
     }
