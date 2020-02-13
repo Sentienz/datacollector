@@ -112,7 +112,7 @@ public class OuterDataParserFormatConfig extends DataParserFormatConfig  {
 
     // Now building FactoryBuilder for outer data format
     builder = new DataParserFactoryBuilder(context, dataFormat.getParserFormat());
-    valid = isValid(context, stageGroup, configPrefix, overrunLimit, issues, builder);
+    valid = isValid(context,dataFormat,stageGroup, configPrefix, overrunLimit, issues, builder);
 
     if (valid) {
       if (dataFormat == DataFormat.FLOWFILE) {

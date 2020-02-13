@@ -49,6 +49,7 @@ import com.streamsets.pipeline.config.OnParseErrorChooserValues;
 import com.streamsets.pipeline.config.OriginAvroSchemaLookupModeChooserValues;
 import com.streamsets.pipeline.config.OriginAvroSchemaSource;
 import com.streamsets.pipeline.config.OriginAvroSchemaSourceChooserValues;
+import com.streamsets.pipeline.config.SASCharsetChooserValues;
 import com.streamsets.pipeline.lib.el.DataUnitsEL;
 import com.streamsets.pipeline.lib.parser.DataParserFactory;
 import com.streamsets.pipeline.lib.parser.DataParserFactoryBuilder;
@@ -149,6 +150,20 @@ public class DataParserFormatConfig implements DataFormatConfig {
   )
   @ValueChooserModel(CharsetChooserValues.class)
   public String charset = "UTF-8";
+
+  /* Charset - SAS & SASXPT */
+  @ConfigDef(
+      required = true,
+      type = ConfigDef.Type.MODEL,
+      defaultValue = "UTF-8",
+      label = "Charset",
+      displayPosition = 999,
+      group = "DATA_FORMAT",
+      dependsOn = "dataFormat^",
+      triggeredByValue = {"SAS", "SASXPT" }
+  )
+  @ValueChooserModel(SASCharsetChooserValues.class)
+  public String SAScharset = "UTF-8";
 
   @ConfigDef(
       required = true,
@@ -1285,6 +1300,12 @@ public class DataParserFormatConfig implements DataFormatConfig {
       case SYSLOG:
         // nothing to validate for these formats
         break;
+      case SAS:
+        valid = true;
+        break;
+      case SASXPT:
+        valid = true;
+        break;
       default:
         issues.add(context.createConfigIssue(
             stageGroup,
@@ -1529,7 +1550,7 @@ public class DataParserFormatConfig implements DataFormatConfig {
   ) {
 
     DataParserFactoryBuilder builder = new DataParserFactoryBuilder(context, dataFormat.getParserFormat());
-    boolean valid = isValid(context, stageGroup, configPrefix, overrunLimit, issues, builder);
+    boolean valid = isValid(context, dataFormat, stageGroup, configPrefix, overrunLimit, issues, builder);
 
     switch (dataFormat) {
       case TEXT:
@@ -1578,6 +1599,12 @@ public class DataParserFormatConfig implements DataFormatConfig {
       case EXCEL:
         buildWorkbookParser(builder);
         break;
+      case SAS:
+        buildSasParser(builder);
+        break;
+      case SASXPT:
+        buildSasXptParser(builder);
+        break;
       default:
         throw new IllegalStateException("Unexpected data format" + dataFormat);
     }
@@ -1593,6 +1620,7 @@ public class DataParserFormatConfig implements DataFormatConfig {
 
   protected boolean isValid(
       ProtoConfigurableEntity.Context context,
+      DataFormat dataFormat,
       String stageGroup,
       String configPrefix,
       int overrunLimit,
@@ -1602,19 +1630,36 @@ public class DataParserFormatConfig implements DataFormatConfig {
     boolean valid = true;
     Charset fileCharset;
 
-    try {
-      fileCharset = Charset.forName(charset);
-    } catch (UnsupportedCharsetException ignored) { // NOSONAR
-      // setting it to a valid one so the parser factory can be configured and tested for more errors
-      fileCharset = StandardCharsets.UTF_8;
-      issues.add(context.createConfigIssue(
-          stageGroup,
-          configPrefix + "charset",
-          DataFormatErrors.DATA_FORMAT_05,
-          charset)
-      );
-      valid = false;
-    }
+    switch (dataFormat) {
+      case SAS:
+      case SASXPT:
+        try {
+          fileCharset = Charset.forName(SAScharset);
+        } catch (UnsupportedCharsetException ignored) { // NOSONAR
+          // setting it to a valid one so the parser factory can be configured and tested for more errors
+            fileCharset = StandardCharsets.UTF_8;
+            issues.add(context.createConfigIssue(stageGroup,
+                configPrefix + "charset",
+                DataFormatErrors.DATA_FORMAT_05,
+                SAScharset
+            ));
+            valid = false;
+          }
+          break;
+      default:
+        try {
+          fileCharset = Charset.forName(charset);
+        } catch (UnsupportedCharsetException ignored) { // NOSONAR
+            // setting it to a valid one so the parser factory can be configured and tested for more errors
+            fileCharset = StandardCharsets.UTF_8;
+            issues.add(context.createConfigIssue(stageGroup,
+                configPrefix + "charset",
+                DataFormatErrors.DATA_FORMAT_05,
+                charset
+            ));
+            valid = false;
+          }
+  }
     builder.setCharset(fileCharset);
     builder.setOverRunLimit(overrunLimit);
     builder.setRemoveCtrlChars(removeCtrlChars);
@@ -1723,6 +1768,14 @@ public class DataParserFormatConfig implements DataFormatConfig {
         .setConfig(WorkbookParserConstants.SKIP_CELLS_WITH_NO_HEADER, excelSkipCellsWithNoHeader)
         .setMode(excelHeader)
         .setMaxDataLen(-1);
+  }
+
+  private void buildSasParser(DataParserFactoryBuilder builder) {
+    builder.setMaxDataLen(-1);
+  }
+
+  private void buildSasXptParser(DataParserFactoryBuilder builder) {
+    builder.setMaxDataLen(-1);
   }
 
   /**
