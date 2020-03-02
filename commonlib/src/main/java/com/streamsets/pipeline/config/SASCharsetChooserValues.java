@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.streamsets.pipeline.config;
 
 import java.nio.charset.Charset;
@@ -32,6 +33,7 @@ import com.streamsets.pipeline.config.CharsetChooserValues.Filter;
 
 public class SASCharsetChooserValues implements ChooserValues {
   private static final Logger LOG = LoggerFactory.getLogger(SASCharsetChooserValues.class);
+  
   private static final List<String> ALL_CHARSETS;
   private List<String> charsets;
 

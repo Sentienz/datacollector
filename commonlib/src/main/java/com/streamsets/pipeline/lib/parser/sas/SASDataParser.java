@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2017 StreamSets Inc.
  *
@@ -34,7 +35,6 @@ public class SASDataParser extends AbstractDataParser {
 
   private final ProtoConfigurableEntity.Context context;
   private SasFileReader sasFileReader;
-  
   private SasFileProperties sasFileProperties;
   private List<Field> headers;
   private boolean isClosed;

@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.epam.parso.SasFileReader;
-import com.epam.parso.SasFileReader;
 import com.epam.parso.impl.SasFileReaderImpl;
 import com.streamsets.pipeline.lib.data.DataFactoryBuilder;
 import com.streamsets.pipeline.lib.parser.DataParser;
