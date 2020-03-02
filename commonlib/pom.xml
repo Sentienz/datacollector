@@ -42,6 +42,8 @@
     <commons-pool2.version>2.4.2</commons-pool2.version>
     <xerces.version>2.11.0</xerces.version>
     <poi.version>3.17</poi.version>
+    <sasxpt.version>0.0.1</sasxpt.version>
+    <sasparso.version>2.0.11</sasparso.version>
   </properties>
 
   <dependencies>
@@ -210,12 +212,12 @@
     <dependency>
       <groupId>com.epam</groupId>
       <artifactId>parso</artifactId>
-      <version>2.0.11</version>
+      <version>${sasparso.version}</version>
     </dependency>
     <dependency>
       <groupId>com.sentienz.sas</groupId>
       <artifactId>sas-xpt</artifactId>
-      <version>0.0.1</version>
+      <version>${sasxpt.version}</version>
     </dependency>
     <!-- Test Dependencies -->
     <dependency>

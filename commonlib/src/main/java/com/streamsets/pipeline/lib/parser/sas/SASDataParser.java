@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017 StreamSets Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.streamsets.pipeline.lib.parser.sas;
 
 import java.io.IOException;
@@ -7,6 +22,8 @@ import java.util.List;
 import com.epam.parso.Column;
 import com.epam.parso.SasFileProperties;
 import com.epam.parso.SasFileReader;
+//import com.epam.parso.SasFileReader;
+import com.epam.parso.impl.SasFileReaderImpl;
 import com.streamsets.pipeline.api.Field;
 import com.streamsets.pipeline.api.ProtoConfigurableEntity;
 import com.streamsets.pipeline.api.Record;
@@ -17,6 +34,7 @@ public class SASDataParser extends AbstractDataParser {
 
   private final ProtoConfigurableEntity.Context context;
   private SasFileReader sasFileReader;
+  
   private SasFileProperties sasFileProperties;
   private List<Field> headers;
   private boolean isClosed;
@@ -85,13 +103,9 @@ public class SASDataParser extends AbstractDataParser {
 
   private void seekOffset() throws IOException, DataParserException {
     int count = 0;
-    while (count < offset) {
-      if (count < recordCount) {
+    while (count < offset && count < recordCount) {
         Object rows[] = sasFileReader.readNext();
         count++;
-      } else {
-        break;
-      }
     }
   }
 }
